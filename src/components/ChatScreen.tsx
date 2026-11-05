@@ -68,8 +68,8 @@ const PAGE_SIZE = 50;
  * (500~1000 사이에서 조절하세요)
  */
 const MAX_LOADED = 500;
-/** 계정당 전송 제한: 1분에 6개 */
-const RATE_LIMIT_COUNT = 6;
+/** 계정당 전송 제한: 1분에 60개 */
+const RATE_LIMIT_COUNT = 60;
 const RATE_WINDOW_MS = 60_000;
 /** 스크롤이 위/아래 끝에서 이 거리 안으로 들어오면 다음 구간을 불러온다 */
 const EDGE_THRESHOLD = 160;
