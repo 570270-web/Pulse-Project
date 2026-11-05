@@ -1,4 +1,4 @@
-import { LogOut, AlertTriangle, MessageCircle, Plus, Search, Globe, Lock, Hash, Sun, Moon, Loader2, ArrowRight } from 'lucide-react';
+import { LogOut, AlertTriangle, MessageCircle, Plus, Search, Globe, Lock, Hash, Loader2, ArrowRight } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import {
   getJoinedRooms,
@@ -13,22 +13,15 @@ import {
   markAnnouncementRead,
   type Announcement,
 } from '@/lib/auth';
-import { useTheme } from '@/lib/useTheme';
 
 type HubScreenProps = {
   nickname: string;
-  onLogout: () => void;
   onEnterRoom: (room: RoomSummary) => void;
 };
 
 type HubTab = 'joined' | 'find';
 
-export default function HubScreen({
-  nickname,
-  onLogout,
-  onEnterRoom,
-}: HubScreenProps) {
-  const { theme, toggleTheme } = useTheme();
+export default function HubScreen({ nickname, onEnterRoom }: HubScreenProps) {
   const [confirmRoomAction, setConfirmRoomAction] =
     useState<RoomSummary | null>(null);
 
@@ -405,23 +398,6 @@ export default function HubScreen({
               </span>
             </div>
 
-            <button
-              type="button"
-              onClick={toggleTheme}
-              title="Toggle theme"
-              className="rounded-lg border border-slate-200 bg-slate-100 p-2 text-slate-500 transition hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400 dark:hover:text-white"
-            >
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </button>
-
-            <button
-              type="button"
-              onClick={onLogout}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600 transition hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Log out</span>
-            </button>
           </div>
         </div>
       </header>
