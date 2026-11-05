@@ -157,7 +157,7 @@ const dict = {
     'err.adminSupport': '관리자 계정은 문의를 보낼 수 없습니다.',
     'err.notAdmin': '관리자 권한이 필요합니다.',
     'err.unknown': '알 수 없는 오류가 발생했습니다.',
-    'err.rate': '메시지는 1분에 6개까지 보낼 수 있어요. {n}초 뒤에 다시 보내 주세요.',
+    'err.rate': '메시지는 1분에 60개까지 보낼 수 있어요. {n}초 뒤에 다시 보내 주세요.',
 
     'sys.joined': '{name}님이 입장했습니다.',
   },
@@ -282,7 +282,7 @@ const dict = {
     'err.notAdmin': 'Administrator permission required.',
     'err.unknown': 'An unknown error occurred.',
     'err.rate':
-      'You can send up to 6 messages per minute. Try again in {n}s.',
+      'You can send up to 60 messages per minute. Try again in {n}s.',
 
     'sys.joined': '{name} joined the room.',
   },

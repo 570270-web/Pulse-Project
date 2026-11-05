@@ -76,7 +76,7 @@ function describeError(raw: string): { text: string; retryAfter?: number } {
     const seconds = Number(rate[1]);
 
     return {
-      text: tr('chat.rateLimit', { max: 6, n: seconds }),
+      text: tr('chat.rateLimit', { max: 60, n: seconds }),
       retryAfter: seconds,
     };
   }
