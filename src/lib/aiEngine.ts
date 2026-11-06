@@ -101,15 +101,24 @@ export function generateReply(input: {
   });
 }
 
-/** WebGPU가 있으면 GPU, 없으면 CPU. */
+/**
+ * WebGPU가 있으면 GPU, 없으면 CPU.
+ * 어댑터가 있어도 fp16 셰이더를 못 만드는 기기는 GPU 모델을 실행할 수 없으므로 CPU로 본다
+ * (워커 쪽 판단과 같아야 화면에 뜨는 기기 표시가 실제 추론과 어긋나지 않는다).
+ */
 export async function detectDevice(): Promise<'webgpu' | 'wasm'> {
   const gpu = (navigator as unknown as {
-    gpu?: { requestAdapter: () => Promise<unknown | null> };
+    gpu?: {
+      requestAdapter: () => Promise<{
+        features?: { has?: (name: string) => boolean };
+      } | null>;
+    };
   }).gpu;
 
   if (gpu) {
     try {
-      if (await gpu.requestAdapter()) return 'webgpu';
+      const adapter = await gpu.requestAdapter();
+      if (adapter?.features?.has?.('shader-f16')) return 'webgpu';
     } catch {
       // 쓸 수 있는 어댑터가 없음
     }

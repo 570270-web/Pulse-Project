@@ -35,15 +35,23 @@ type Loaded = {
 let loaded: Loaded | null = null;
 const stoppers = new Map<string, InterruptableStoppingCriteria>();
 
+type GpuAdapter = { features?: { has?: (name: string) => boolean } };
+
+/**
+ * GPU로 돌릴 수 있는지. 어댑터가 있어도 fp16 셰이더를 못 만드는 기기가 있는데,
+ * 그런 기기에서는 q4f16 모델이 로드까지는 되고 첫 연산에서 죽는다
+ * ("Gather requires f16 but the device does not support it"). 그래서 처음부터 걸러 낸다.
+ */
 async function hasWebGPU(): Promise<boolean> {
   const gpu = (navigator as unknown as {
-    gpu?: { requestAdapter: () => Promise<unknown | null> };
+    gpu?: { requestAdapter: () => Promise<GpuAdapter | null> };
   }).gpu;
 
   if (!gpu) return false;
 
   try {
-    return Boolean(await gpu.requestAdapter());
+    const adapter = await gpu.requestAdapter();
+    return Boolean(adapter?.features?.has?.('shader-f16'));
   } catch {
     return false;
   }
@@ -56,8 +64,9 @@ async function hasWebGPU(): Promise<boolean> {
 async function load(
   request: AiGenerateRequest,
   onProgress: (progress: number) => void,
+  forceCpu = false,
 ): Promise<Loaded> {
-  if (loaded?.repo === request.repo) return loaded;
+  if (!forceCpu && loaded?.repo === request.repo) return loaded;
 
   if (loaded) {
     try {
@@ -99,7 +108,9 @@ async function load(
   const attempts: { device: 'webgpu' | 'wasm'; dtype: 'q4f16' | 'q8' }[] = [];
 
   // GPU는 4비트 가중치 + fp16, CPU는 fp16 커널이 없어서 8비트를 쓴다.
-  if (await hasWebGPU()) attempts.push({ device: 'webgpu', dtype: 'q4f16' });
+  if (!forceCpu && (await hasWebGPU())) {
+    attempts.push({ device: 'webgpu', dtype: 'q4f16' });
+  }
   attempts.push({ device: 'wasm', dtype: 'q8' });
 
   let failure: unknown;
@@ -156,16 +167,11 @@ async function run(request: AiGenerateRequest) {
 
   let text = '';
 
-  try {
-    const model = await load(request, (progress) =>
-      post({ type: 'progress', id: request.id, progress }),
-    );
+  const onProgress = (progress: number) =>
+    post({ type: 'progress', id: request.id, progress });
 
-    if (stopper.interrupted) {
-      post({ type: 'done', id: request.id, text });
-      return;
-    }
-
+  /** 한 번의 생성. 스트리밍 조각은 text 에 차곡차곡 쌓인다. */
+  const generate = async (model: Loaded) => {
     const streamer = new TextStreamer(model.tokenizer as never, {
       skip_prompt: true,
       skip_special_tokens: true,
@@ -185,6 +191,32 @@ async function run(request: AiGenerateRequest) {
     });
 
     if (!text) text = replyText(output);
+  };
+
+  try {
+    let model = await load(request, onProgress);
+
+    if (stopper.interrupted) {
+      post({ type: 'done', id: request.id, text });
+      return;
+    }
+
+    try {
+      await generate(model);
+    } catch (error) {
+      // GPU 커널이 없다고 로드가 끝난 뒤에야 알려주는 기기도 있다(위의 Gather/f16).
+      // 아직 아무 글자도 못 냈으면 모델을 CPU(8비트)로 다시 올려 한 번 더 시도한다.
+      if (model.device !== 'webgpu' || text) throw error;
+
+      model = await load(request, onProgress, true);
+
+      if (stopper.interrupted) {
+        post({ type: 'done', id: request.id, text });
+        return;
+      }
+
+      await generate(model);
+    }
 
     post({ type: 'done', id: request.id, text });
   } catch (error) {
