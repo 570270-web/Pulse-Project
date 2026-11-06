@@ -2509,48 +2509,6 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
         </ModalShell>
       )}
 
-      {/* 강퇴 / 차단 해제 확인 */}
-      {blockTarget && (
-        <ModalShell
-          title={
-            blockTarget.blocked ? tr('chat.unblockTitle') : tr('chat.blockTitle')
-          }
-          onClose={() => {
-            if (!actionBusy) setBlockTarget(null);
-          }}
-        >
-          <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-            {tr(blockTarget.blocked ? 'chat.unblockBody' : 'chat.blockBody', {
-              name: blockTarget.nickname,
-            })}
-          </p>
-
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              type="button"
-              disabled={actionBusy}
-              onClick={() => setBlockTarget(null)}
-              className="rounded-lg px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-slate-800"
-            >
-              {tr('common.cancel')}
-            </button>
-            <button
-              type="button"
-              disabled={actionBusy}
-              onClick={() => void toggleBlock()}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
-                blockTarget.blocked
-                  ? 'bg-slate-700 hover:bg-slate-600'
-                  : 'bg-red-600 hover:bg-red-500'
-              }`}
-            >
-              {actionBusy && <Loader2 className="h-4 w-4 animate-spin" />}
-              {blockTarget.blocked ? tr('chat.unblock') : tr('chat.block')}
-            </button>
-          </div>
-        </ModalShell>
-      )}
-
       {/* 참여자 */}
       {showMembers && (
         <ModalShell
@@ -2648,6 +2606,48 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
               })}
             </ul>
           )}
+        </ModalShell>
+      )}
+
+      {/* 강퇴 / 차단 해제 확인 — 참여자 목록보다 뒤에 그려야 그 위에 뜬다 */}
+      {blockTarget && (
+        <ModalShell
+          title={
+            blockTarget.blocked ? tr('chat.unblockTitle') : tr('chat.blockTitle')
+          }
+          onClose={() => {
+            if (!actionBusy) setBlockTarget(null);
+          }}
+        >
+          <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            {tr(blockTarget.blocked ? 'chat.unblockBody' : 'chat.blockBody', {
+              name: blockTarget.nickname,
+            })}
+          </p>
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={actionBusy}
+              onClick={() => setBlockTarget(null)}
+              className="rounded-lg px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-slate-800"
+            >
+              {tr('common.cancel')}
+            </button>
+            <button
+              type="button"
+              disabled={actionBusy}
+              onClick={() => void toggleBlock()}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
+                blockTarget.blocked
+                  ? 'bg-slate-700 hover:bg-slate-600'
+                  : 'bg-red-600 hover:bg-red-500'
+              }`}
+            >
+              {actionBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+              {blockTarget.blocked ? tr('chat.unblock') : tr('chat.block')}
+            </button>
+          </div>
         </ModalShell>
       )}
 
