@@ -3,6 +3,8 @@ import AuthScreen from '@/components/AuthScreen';
 import ChatScreen from '@/components/ChatScreen';
 import AdminScreen from '@/components/AdminScreen';
 import HubScreen from '@/components/HubScreen';
+import AiScreen from '@/components/AiScreen';
+import AppSidebar, { type AppSection } from '@/components/AppSidebar';
 import SupportButton from '@/components/SupportButton';
 import { getToken, clearToken } from '@/lib/supabase';
 import { getSessionNickname, checkIsAdmin } from '@/lib/auth';
@@ -15,6 +17,9 @@ export default function App() {
   const [nickname, setNickname] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeRoom, setActiveRoom] = useState<RoomSummary | null>(null);
+  const [screen, setScreen] = useState<AppSection>('hub');
+  // AI 화면은 한 번 열면 계속 살려 둔다(다른 탭에 다녀와도 대화와 답변이 유지되도록).
+  const [aiMounted, setAiMounted] = useState(false);
 
   const [checking, setChecking] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
@@ -91,6 +96,7 @@ export default function App() {
     setNickname(null);
     setIsAdmin(false);
     setActiveRoom(null);
+    setScreen('hub');
   };
 
   const handleAuthSuccess = async (name: string) => {
@@ -106,6 +112,7 @@ export default function App() {
 
       setNickname(name);
       setActiveRoom(null);
+      setScreen('hub');
     } catch {
       setFatalError(true);
     } finally {
@@ -119,6 +126,11 @@ export default function App() {
 
   const handleBackToHub = () => {
     setActiveRoom(null);
+  };
+
+  const goToSection = (next: AppSection) => {
+    if (next === 'ai') setAiMounted(true);
+    setScreen(next);
   };
 
   if (sessionChanged) {
@@ -198,34 +210,45 @@ export default function App() {
     />
   ) : null;
 
-  // 허브/관리자 화면은 방에 들어가 있는 동안에도 숨겨서 유지한다
+  // 허브/AI 화면은 다른 화면을 보는 동안에도 숨겨서 유지한다
   // (돌아올 때 다시 만들고 다시 불러오느라 느려지지 않도록)
-  if (isAdmin) {
-    return (
-      <>
-        <div hidden={!!activeRoom}>
-          <AdminScreen
-            nickname={nickname}
-            onLogout={handleLogout}
-            onEnterRoom={handleEnterRoom}
-            active={!activeRoom}
-          />
-        </div>
-        {chat}
-      </>
-    );
-  }
+  const hubHidden = screen !== 'hub';
+  const aiHidden = screen !== 'ai';
 
   return (
     <>
-      <div hidden={!!activeRoom}>
-        <HubScreen
-          nickname={nickname}
+      <div className={`${activeRoom ? 'hidden' : 'flex'} min-h-screen`}>
+        <AppSidebar
+          active={screen}
+          onNavigate={goToSection}
           onLogout={handleLogout}
-          onEnterRoom={handleEnterRoom}
         />
-        <SupportButton onEnterRoom={handleEnterRoom} />
+
+        <div className="min-w-0 flex-1">
+          <div className={hubHidden ? 'hidden' : 'block'}>
+            {isAdmin ? (
+              <AdminScreen
+                nickname={nickname}
+                onLogout={handleLogout}
+                onEnterRoom={handleEnterRoom}
+                active={!hubHidden}
+              />
+            ) : (
+              <>
+                <HubScreen nickname={nickname} onEnterRoom={handleEnterRoom} />
+                <SupportButton />
+              </>
+            )}
+          </div>
+
+          {aiMounted && (
+            <div className={aiHidden ? 'hidden' : 'block'}>
+              <AiScreen nickname={nickname} />
+            </div>
+          )}
+        </div>
       </div>
+
       {chat}
     </>
   );
