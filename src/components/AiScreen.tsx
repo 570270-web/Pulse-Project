@@ -204,6 +204,8 @@ export default function AiScreen({ nickname }: AiScreenProps) {
           model: local,
           messages: prompt,
           signal: controller.signal,
+          onReset: () =>
+            setTurn((current) => (current ? { ...current, text: '' } : current)),
           onProgress: (progress) =>
             setTurn((current) => (current ? { ...current, progress } : current)),
           onToken: (chunk) =>

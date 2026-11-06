@@ -6,6 +6,7 @@ import type { AiGenerateRequest, AiWorkerEvent } from './aiProtocol';
 
 type Job = {
   onToken: (text: string) => void;
+  onReset?: () => void;
   onProgress?: (progress: number) => void;
   resolve: (text: string) => void;
   reject: (error: Error) => void;
@@ -29,6 +30,9 @@ function engine(): Worker {
     const data = event.data;
 
     switch (data.type) {
+      case 'reset':
+        job.onReset?.();
+        break;
       case 'progress':
         job.onProgress?.(data.progress);
         break;
@@ -72,6 +76,7 @@ export function generateReply(input: {
   messages: AiGenerateRequest['messages'];
   signal?: AbortSignal;
   onToken: (text: string) => void;
+  onReset?: () => void;
   onProgress?: (progress: number) => void;
 }): Promise<string> {
   const id = crypto.randomUUID();
@@ -85,6 +90,7 @@ export function generateReply(input: {
 
     jobs.set(id, {
       onToken: input.onToken,
+      onReset: input.onReset,
       onProgress: input.onProgress,
       resolve,
       reject,
