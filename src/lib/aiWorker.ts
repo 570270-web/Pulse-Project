@@ -12,6 +12,7 @@ import {
 
 import { MAX_OUTPUT_TOKENS } from './aiConfig';
 import type {
+  AiChatTurn,
   AiGenerateRequest,
   AiWorkerEvent,
   AiWorkerRequest,
@@ -24,7 +25,7 @@ const post = (event: AiWorkerEvent) =>
     event,
   );
 
-type Pipeline = (messages: unknown, options: Record<string, unknown>) => Promise<unknown>;
+type Pipeline = (prompt: string, options: Record<string, unknown>) => Promise<unknown>;
 type Loaded = {
   repo: string;
   device: 'webgpu' | 'wasm';
@@ -160,6 +161,62 @@ function replyText(output: unknown): string {
   return '';
 }
 
+/**
+ * 토크나이저의 채팅 템플릿으로 프롬프트 문자열을 만든다.
+ * messages 를 그대로 파이프라인에 넘기면 내부에서 템플릿이 적용되지만, 그 경우
+ * 스트리머의 skip_prompt 가 생성문 앞부분까지 잘라 답이 중간부터 나온다.
+ * 그래서 여기서 문자열로 만들어 파이프라인에는 프롬프트 문자열만 넘긴다.
+ */
+function renderPrompt(
+  tokenizer: unknown,
+  messages: AiChatTurn[],
+  nudge?: string,
+): string {
+  let list: AiChatTurn[] = messages;
+
+  if (nudge) {
+    const first = messages[0];
+
+    list =
+      first?.role === 'system'
+        ? [
+            { ...first, content: `${first.content}\n${nudge}` },
+            ...messages.slice(1),
+          ]
+        : [{ role: 'system', content: nudge }, ...messages];
+  }
+
+  const applied = (
+    tokenizer as {
+      apply_chat_template?: (
+        chat: unknown,
+        options: Record<string, unknown>,
+      ) => string;
+    }
+  ).apply_chat_template;
+
+  if (typeof applied === 'function') {
+    try {
+      return applied.call(tokenizer, list, {
+        tokenize: false,
+        add_generation_prompt: true,
+      });
+    } catch {
+      // 템플릿이 없거나 깨진 모델은 아래 ChatML 로 대신한다.
+    }
+  }
+
+  return `${list
+    .map(
+      (message) => `<|im_start|>${message.role}\n${message.content}<|im_end|>\n`,
+    )
+    .join('')}<|im_start|>assistant\n`;
+}
+
+/** 공백·문장부호를 지운 비교용 문자열. */
+const bare = (value: string) =>
+  value.replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
+
 async function run(request: AiGenerateRequest) {
   const stopper = new InterruptableStoppingCriteria();
 
@@ -167,12 +224,18 @@ async function run(request: AiGenerateRequest) {
 
   let text = '';
 
+  const lastUser =
+    [...request.messages].reverse().find((message) => message.role === 'user')
+      ?.content ?? '';
+
   const onProgress = (progress: number) =>
     post({ type: 'progress', id: request.id, progress });
 
   /** 한 번의 생성. 스트리밍 조각은 text 에 차곡차곡 쌓인다. */
-  const generate = async (model: Loaded) => {
+  const generate = async (model: Loaded, prompt: string) => {
     const streamer = new TextStreamer(model.tokenizer as never, {
+      // 파이프라인이 프롬프트 토큰까지 스트리머에 넘기므로 반드시 건너뛴다.
+      // (끄면 시스템 프롬프트와 질문이 답변처럼 그대로 출력된다.)
       skip_prompt: true,
       skip_special_tokens: true,
       callback_function: (chunk: string) => {
@@ -182,7 +245,7 @@ async function run(request: AiGenerateRequest) {
       },
     });
 
-    const output = await model.pipe(request.messages, {
+    const output = await model.pipe(prompt, {
       max_new_tokens: request.maxTokens || MAX_OUTPUT_TOKENS,
       do_sample: false,
       return_full_text: false,
@@ -201,8 +264,19 @@ async function run(request: AiGenerateRequest) {
       return;
     }
 
+    /** 지금까지 쌓인 글자를 버리고 처음부터 다시 쓴다. */
+    const restart = () => {
+      text = '';
+      post({ type: 'reset', id: request.id });
+    };
+
+    const answer = async () => {
+      restart();
+      await generate(model, renderPrompt(model.tokenizer, request.messages));
+    };
+
     try {
-      await generate(model);
+      await answer();
     } catch (error) {
       // GPU 커널이 없다고 로드가 끝난 뒤에야 알려주는 기기도 있다(위의 Gather/f16).
       // 아직 아무 글자도 못 냈으면 모델을 CPU(8비트)로 다시 올려 한 번 더 시도한다.
@@ -215,7 +289,20 @@ async function run(request: AiGenerateRequest) {
         return;
       }
 
-      await generate(model);
+      await answer();
+    }
+
+    // 작은 모델은 가끔 질문을 그대로 따라 쓴다. 그건 답이 아니므로 한 번만 다시 시킨다.
+    if (!stopper.interrupted && lastUser && bare(text) === bare(lastUser)) {
+      restart();
+      await generate(
+        model,
+        renderPrompt(
+          model.tokenizer,
+          request.messages,
+          'Answer the question itself. Never repeat the question back to the user.',
+        ),
+      );
     }
 
     post({ type: 'done', id: request.id, text });

@@ -20,5 +20,7 @@ export type AiWorkerRequest = AiGenerateRequest | AiCancelRequest;
 export type AiWorkerEvent =
   | { type: 'progress'; id: string; progress: number }
   | { type: 'delta'; id: string; text: string }
+  // 이미 보낸 조각을 버리고 처음부터 다시 쓴다(같은 답을 두 번 생성할 때).
+  | { type: 'reset'; id: string }
   | { type: 'done'; id: string; text: string }
   | { type: 'error'; id: string; message: string };
