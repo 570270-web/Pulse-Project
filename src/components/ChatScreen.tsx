@@ -283,6 +283,18 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  /**
+   * 접속 표시(presence) 전용 채널.
+   * presence는 토픽 단위로 묶이기 때문에, 재연결마다 토픽이 바뀌는 메시지 채널과
+   * 분리해서 방마다 항상 같은 토픽을 쓴다.
+   */
+  const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(
+    null
+  );
+  /** presence 키: 탭마다 고유해서 같은 계정으로 여러 탭을 열어도 서로 덮어쓰지 않는다 */
+  const presenceKeyRef = useRef(
+    `${nickname.toLocaleLowerCase()}:${Math.random().toString(36).slice(2, 10)}`
+  );
   const [reconnectTick, setReconnectTick] = useState(0);
   const roomNameRef = useRef(room.name);
   const firstLoadRef = useRef(true);
@@ -331,6 +343,23 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
     hasNewerRef.current = value;
     setHasNewerState(value);
   };
+
+  /** 내 접속 상태를 알린다 (typing 포함). 채널이 붙기 전이면 조용히 넘어간다. */
+  const publishPresence = useCallback(
+    (typing: boolean) => {
+      const channel = presenceChannelRef.current;
+
+      if (!channel || channel.state !== 'joined') return;
+
+      void channel.track({
+        nickname,
+        room_id: room.id,
+        online_at: onlineAtRef.current,
+        typing,
+      });
+    },
+    [nickname, room.id]
+  );
 
   /* ------------------------------------------------------------------ */
   /* 데이터 불러오기                                                      */
@@ -637,12 +666,7 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
         return;
       }
 
-      void channel.track({
-        nickname,
-        room_id: room.id,
-        online_at: onlineAtRef.current,
-        typing: false,
-      });
+      publishPresence(typingRef.current);
     };
 
     const timer = window.setInterval(() => {
@@ -663,7 +687,7 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
       window.removeEventListener('focus', check);
       window.removeEventListener('online', check);
     };
-  }, [nickname, room.id]);
+  }, [nickname, room.id, publishPresence]);
 
   /* ------------------------------------------------------------------ */
   /* 실시간 구독 + 첫 로드                                                */
@@ -684,9 +708,7 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
     }
 
     const channel = supabase
-      .channel(`room:${room.id}:messages:${reconnectTick}`, {
-        config: { presence: { key: nickname } },
-      })
+      .channel(`room:${room.id}:messages:${reconnectTick}`)
       .on(
         'postgres_changes',
         {
@@ -779,41 +801,11 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
           );
         }
       )
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-
-        setOnlineNicknames(Object.keys(state));
-
-        const typingUsers = Object.values(state)
-          .flat()
-          .filter((presence: Record<string, unknown>) => {
-            const presenceNickname = String(presence.nickname ?? '');
-
-            return (
-              presence.typing === true &&
-              presenceNickname.toLocaleLowerCase() !== nicknameLower &&
-              String(presence.room_id ?? '') === room.id
-            );
-          })
-          .map((presence: Record<string, unknown>) =>
-            String(presence.nickname ?? '').trim()
-          )
-          .filter(Boolean);
-
-        setTypingNicknames([...new Set(typingUsers)]);
-      })
-      .subscribe(async (status) => {
+      .subscribe((status) => {
         if (disposed) return;
 
         if (status === 'SUBSCRIBED') {
           reconnectAttemptRef.current = 0;
-
-          await channel.track({
-            nickname,
-            room_id: room.id,
-            online_at: onlineAtRef.current,
-            typing: false,
-          });
 
           // 끊겨 있던 동안 온 메시지 보충
           void pollTail();
@@ -871,6 +863,111 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
     loadPreviewsFor,
     refreshRoomInfo,
   ]);
+
+  /* ------------------------------------------------------------------ */
+  /* 접속 표시(presence): 방마다 고정 토픽을 쓰는 전용 채널                 */
+  /* ------------------------------------------------------------------ */
+
+  useEffect(() => {
+    let disposed = false;
+    let heartbeat: number | null = null;
+
+    const topic = `room:${room.id}:presence`;
+
+    const applyState = (channel: ReturnType<typeof supabase.channel>) => {
+      if (disposed) return;
+
+      const online = new Set<string>();
+      const typing = new Set<string>();
+
+      Object.values(channel.presenceState()).forEach((entries) => {
+        (entries as unknown as Record<string, unknown>[]).forEach((entry) => {
+          const name = String(entry.nickname ?? '').trim();
+
+          if (!name) return;
+          if (String(entry.room_id ?? '') !== room.id) return;
+
+          online.add(name);
+
+          if (entry.typing === true && name.toLocaleLowerCase() !== nicknameLower) {
+            typing.add(name);
+          }
+        });
+      });
+
+      setOnlineNicknames([...online]);
+      setTypingNicknames([...typing]);
+    };
+
+    const announce = (channel: ReturnType<typeof supabase.channel>) => {
+      void channel.track({
+        nickname,
+        room_id: room.id,
+        online_at: onlineAtRef.current,
+        typing: typingRef.current,
+      });
+    };
+
+    const setup = async () => {
+      // 이전에 남아 있는 같은 토픽 채널을 먼저 정리한다 (중복 구독 방지)
+      for (const existing of supabase.getChannels()) {
+        if (
+          existing.topic === `realtime:${topic}` ||
+          existing.topic === topic
+        ) {
+          await supabase.removeChannel(existing);
+        }
+      }
+
+      if (disposed) return;
+
+      const channel = supabase.channel(topic, {
+        config: { presence: { key: presenceKeyRef.current } },
+      });
+
+      channel
+        .on('presence', { event: 'sync' }, () => applyState(channel))
+        .on('presence', { event: 'join' }, () => applyState(channel))
+        .on('presence', { event: 'leave' }, () => applyState(channel))
+        .subscribe((status) => {
+          if (disposed) return;
+
+          if (status !== 'SUBSCRIBED') return;
+
+          announce(channel);
+
+          // 탭이 살아 있는 동안 주기적으로 다시 알려, 신호가 유실돼도 복구되게 한다
+          if (heartbeat === null) {
+            heartbeat = window.setInterval(() => {
+              if (document.hidden) return;
+              if (channel.state !== 'joined') return;
+
+              announce(channel);
+            }, 20000);
+          }
+        });
+
+      presenceChannelRef.current = channel;
+    };
+
+    void setup();
+
+    return () => {
+      disposed = true;
+
+      if (heartbeat !== null) {
+        window.clearInterval(heartbeat);
+        heartbeat = null;
+      }
+
+      const channel = presenceChannelRef.current;
+
+      presenceChannelRef.current = null;
+
+      // 나갈 때 명시적으로 나가서 유령 참여자가 남지 않게 한다
+      if (channel) void supabase.removeChannel(channel);
+    };
+  }, [room.id, nickname, nicknameLower]);
 
   /* ------------------------------------------------------------------ */
   /* 스크롤 위치 관리                                                     */
@@ -960,16 +1057,7 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
   }, [cooldown]);
 
   const trackPresence = (typing: boolean) => {
-    const channel = channelRef.current;
-
-    if (!channel) return;
-
-    void channel.track({
-      nickname,
-      room_id: room.id,
-      online_at: onlineAtRef.current,
-      typing,
-    });
+    publishPresence(typing);
   };
 
   const stopTyping = () => {
