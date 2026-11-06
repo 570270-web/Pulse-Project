@@ -15,7 +15,6 @@ import {
 
 import {
   AI_MODELS,
-  AI_SUGGESTIONS,
   AI_SYSTEM_PROMPT,
   DEFAULT_AI_MODEL,
   MAX_CONTEXT_MESSAGES,
@@ -485,18 +484,6 @@ export default function AiScreen({ nickname }: AiScreenProps) {
                   내려받고, 이후엔 캐시에서 불러옵니다.
                 </p>
 
-                <div className="mt-6 grid gap-2 sm:grid-cols-2">
-                  {AI_SUGGESTIONS.map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      onClick={() => void send(suggestion)}
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm text-slate-600 transition hover:border-cyan-400 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:border-cyan-500/40 dark:hover:text-white"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
               </div>
             ) : (
               messages.map((message) => (
