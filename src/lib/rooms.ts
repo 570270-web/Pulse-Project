@@ -7,7 +7,7 @@ import { tr, type TKey } from './i18n';
 /** 모든 RPC 래퍼가 돌려주는 공통 결과 형태 */
 export type Result<T> =
   | { ok: true; data: T }
-  | { ok: false; error: string; retryAfter?: number };
+  | { ok: false; error: string; retryAfter?: number; code?: string };
 
 export type MessagePreview = {
   id: string;
@@ -23,6 +23,8 @@ export type RoomMember = {
   nickname: string;
   role: 'owner' | 'co_admin' | 'member';
   joined_at: string;
+  /** 방장이 이 방에서 차단(강퇴)했는지 */
+  blocked: boolean;
 };
 
 /** 관리자 문의함의 한 줄 = 문의한 유저 1명 (방이 아님) */
@@ -56,6 +58,7 @@ export type AdminRoomRow = {
 
 /** 긴 코드가 먼저 매칭되도록 순서에 주의 (예: ..._LENGTH 가 INVALID_ROOM_PASSWORD 보다 먼저) */
 const ERROR_KEYS: Array<[string, TKey]> = [
+  ['ROOM_BLOCKED', 'err.roomBlocked'],
   ['INVALID_ROOM_PASSWORD_LENGTH', 'err.pwLength'],
   ['INVALID_ROOM_PASSWORD', 'err.roomPw'],
   ['NOT_ROOM_MEMBER', 'err.notMember'],
@@ -72,7 +75,11 @@ const ERROR_KEYS: Array<[string, TKey]> = [
   ['NOT_ADMIN', 'err.notAdmin'],
 ];
 
-function describeError(raw: string): { text: string; retryAfter?: number } {
+function describeError(raw: string): {
+  text: string;
+  retryAfter?: number;
+  code?: string;
+} {
   const rate = /RATE_LIMIT_EXCEEDED:(\d+)/i.exec(raw);
 
   if (rate) {
@@ -81,13 +88,14 @@ function describeError(raw: string): { text: string; retryAfter?: number } {
     return {
       text: tr('chat.rateLimit', { max: 60, n: seconds }),
       retryAfter: seconds,
+      code: 'RATE_LIMIT_EXCEEDED',
     };
   }
 
   const upper = raw.toUpperCase();
 
   for (const [code, key] of ERROR_KEYS) {
-    if (upper.includes(code)) return { text: tr(key) };
+    if (upper.includes(code)) return { text: tr(key), code };
   }
 
   return { text: raw || tr('err.unknown') };
@@ -110,6 +118,7 @@ async function call<T>(
       ok: false,
       error: described.text,
       retryAfter: described.retryAfter,
+      code: described.code,
     };
   }
 
@@ -291,8 +300,26 @@ export async function getRoomMembers(
       role:
         row.role === 'owner' || row.role === 'co_admin' ? row.role : 'member',
       joined_at: String(row.joined_at ?? ''),
+      blocked: row.blocked === true,
     })),
   };
+}
+
+/** 방장/부방장/관리자가 멤버를 차단하거나 차단을 해제한다 */
+export async function setRoomMemberBlocked(
+  roomId: string,
+  nickname: string,
+  blocked: boolean
+): Promise<Result<boolean>> {
+  const res = await call<boolean>('set_room_member_blocked', {
+    p_room_id: roomId,
+    p_nickname: nickname,
+    p_blocked: blocked,
+  });
+
+  if (!res.ok) return res;
+
+  return { ok: true, data: res.data === true };
 }
 
 /** 읽음 확인: 방 멤버 1명의 마지막 읽은 시각 */

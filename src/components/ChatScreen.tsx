@@ -44,6 +44,7 @@ import {
   uploadChatImage,
   chatImageUrl,
   getRoomMembers,
+  setRoomMemberBlocked,
   markRoomRead,
   fetchRoomReadState,
   renameRoom,
@@ -273,6 +274,10 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
   >({});
   const [readListMessage, setReadListMessage] = useState<Message | null>(null);
   const [readListMembers, setReadListMembers] = useState<string[]>([]);
+  /** 서버가 이 방의 기록·입력을 막았을 때 (강퇴됨) */
+  const [blockedFromRoom, setBlockedFromRoom] = useState(false);
+  /** 차단/해제 확인 중인 멤버 */
+  const [blockTarget, setBlockTarget] = useState<RoomMember | null>(null);
 
   const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
@@ -487,6 +492,12 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
       if (!aliveRef.current) return;
 
       if (!res.ok) {
+        if (res.code === 'ROOM_BLOCKED') {
+          setBlockedFromRoom(true);
+          setLoading(false);
+          return;
+        }
+
         setActionError(res.error);
         if (initial) setLoading(false);
         return;
@@ -1345,6 +1356,12 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
       );
 
       if (!result.ok) {
+        // 보내는 도중 차단되었으면 화면을 바로 차단 상태로 바꾼다.
+        if (result.code === 'ROOM_BLOCKED') {
+          setBlockedFromRoom(true);
+          return;
+        }
+
         setActionError(result.error);
         if (result.retryAfter) setCooldown(result.retryAfter);
         return;
@@ -1460,6 +1477,44 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
     else setMembersError(res.error);
 
     setMembersLoading(false);
+  };
+
+  /** 이 멤버를 강퇴/해제할 수 있는지 (사이트 관리자·방장, 부방장은 일반 멤버만) */
+  const canBlockMember = (member: RoomMember): boolean => {
+    if (isSupportRoom) return false;
+    if (member.nickname.toLocaleLowerCase() === nicknameLower) return false;
+    if (member.role === 'owner') return false;
+    if (role === 'admin' || role === 'owner') return true;
+
+    return role === 'co_admin' && member.role === 'member';
+  };
+
+  /** 강퇴 또는 차단 해제 */
+  const toggleBlock = async () => {
+    if (!blockTarget || actionBusy) return;
+
+    const next = !blockTarget.blocked;
+    const target = blockTarget.nickname;
+
+    setActionBusy(true);
+
+    const res = await setRoomMemberBlocked(room.id, target, next);
+
+    if (!aliveRef.current) return;
+
+    setActionBusy(false);
+
+    if (!res.ok) {
+      setActionError(res.error);
+      return;
+    }
+
+    setMembers((previous) =>
+      previous.map((member) =>
+        member.nickname === target ? { ...member, blocked: next } : member
+      )
+    );
+    setBlockTarget(null);
   };
 
   const openSettings = async () => {
@@ -1904,6 +1959,52 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
     sending ||
     actionBusy ||
     (!editingMessage && cooldown > 0);
+
+  /* 강퇴된 방: 기록도 입력창도 주지 않고 안내만 보여준다 */
+  if (blockedFromRoom) {
+    return (
+      <div className="flex h-[100dvh] flex-col bg-slate-50 dark:bg-slate-950">
+        <header className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white/80 px-4 py-3 backdrop-blur-xl sm:px-6 dark:border-slate-800 dark:bg-slate-900/80">
+          <button
+            type="button"
+            onClick={handleBackToHub}
+            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
+            title={tr('chat.backToHub')}
+            aria-label={tr('chat.backToHub')}
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+
+          <h1 className="truncate text-lg font-bold text-slate-900 dark:text-white">
+            {roomInfo.name}
+          </h1>
+        </header>
+
+        <div className="flex flex-1 items-center justify-center px-5 py-8">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-red-100 text-red-600 dark:bg-red-950/50 dark:text-red-400">
+              <Lock className="h-6 w-6" />
+            </div>
+
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              {tr('chat.blockedRoomTitle')}
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+              {tr('chat.blockedRoomBody')}
+            </p>
+
+            <button
+              type="button"
+              onClick={handleBackToHub}
+              className="mt-5 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+            >
+              {tr('chat.backToHub')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -2408,6 +2509,48 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
         </ModalShell>
       )}
 
+      {/* 강퇴 / 차단 해제 확인 */}
+      {blockTarget && (
+        <ModalShell
+          title={
+            blockTarget.blocked ? tr('chat.unblockTitle') : tr('chat.blockTitle')
+          }
+          onClose={() => {
+            if (!actionBusy) setBlockTarget(null);
+          }}
+        >
+          <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            {tr(blockTarget.blocked ? 'chat.unblockBody' : 'chat.blockBody', {
+              name: blockTarget.nickname,
+            })}
+          </p>
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={actionBusy}
+              onClick={() => setBlockTarget(null)}
+              className="rounded-lg px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-slate-800"
+            >
+              {tr('common.cancel')}
+            </button>
+            <button
+              type="button"
+              disabled={actionBusy}
+              onClick={() => void toggleBlock()}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
+                blockTarget.blocked
+                  ? 'bg-slate-700 hover:bg-slate-600'
+                  : 'bg-red-600 hover:bg-red-500'
+              }`}
+            >
+              {actionBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+              {blockTarget.blocked ? tr('chat.unblock') : tr('chat.block')}
+            </button>
+          </div>
+        </ModalShell>
+      )}
+
       {/* 참여자 */}
       {showMembers && (
         <ModalShell
@@ -2459,6 +2602,29 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
                       <span className="rounded-md bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
                         {tr('chat.coAdmin')}
                       </span>
+                    )}
+
+                    {member.blocked && (
+                      <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-500/15 dark:text-red-300">
+                        {tr('chat.blockedBadge')}
+                      </span>
+                    )}
+
+                    {canBlockMember(member) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBlockTarget(member);
+                          setActionError('');
+                        }}
+                        className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium transition ${
+                          member.blocked
+                            ? 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                            : 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40'
+                        }`}
+                      >
+                        {member.blocked ? tr('chat.unblock') : tr('chat.block')}
+                      </button>
                     )}
 
                     <span
