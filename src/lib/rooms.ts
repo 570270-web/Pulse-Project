@@ -14,6 +14,7 @@ export type MessagePreview = {
   nickname: string;
   content: string;
   deleted: boolean;
+  attachment_path?: string | null;
   /** 서버에서 찾지 못한 원본(완전히 삭제됨 등) */
   missing?: boolean;
 };
@@ -60,6 +61,8 @@ const ERROR_KEYS: Array<[string, TKey]> = [
   ['NOT_ROOM_MEMBER', 'err.notMember'],
   ['INVALID_SESSION', 'err.session'],
   ['INVALID_MESSAGE_CONTENT', 'err.content'],
+  ['INVALID_ATTACHMENT', 'chat.imageUpload'],
+  ['UPLOAD_NOT_CONFIGURED', 'chat.imageUpload'],
   ['REPLY_TARGET_INVALID', 'err.replyTarget'],
   ['INVALID_ROOM_NAME', 'err.roomName'],
   ['ROOM_PERMISSION_DENIED', 'err.permission'],
@@ -123,6 +126,7 @@ function toMessages(rows: unknown): Message[] {
     reply_to_id: row.reply_to_id ? String(row.reply_to_id) : null,
     deleted: row.deleted === true,
     is_system: row.is_system === true,
+    attachment_path: row.attachment_path ? String(row.attachment_path) : null,
   }));
 }
 
@@ -178,6 +182,7 @@ export async function fetchMessagePreviews(
       nickname: String(row.nickname ?? ''),
       content: String(row.content ?? ''),
       deleted: row.deleted === true,
+      attachment_path: row.attachment_path ? String(row.attachment_path) : null,
     })),
   };
 }
@@ -186,17 +191,90 @@ export async function fetchMessagePreviews(
 export async function sendRoomMessage(
   content: string,
   roomId: string,
-  replyToId: string | null
+  replyToId: string | null,
+  attachmentPath: string | null = null
 ): Promise<Result<null>> {
   const res = await call<unknown>('send_message', {
     p_content: content,
     p_room_id: roomId,
     p_reply_to_id: replyToId,
+    p_attachment_path: attachmentPath,
   });
 
   if (!res.ok) return res;
 
   return { ok: true, data: null };
+}
+
+/** 사진 버킷 이름 (마이그레이션 0003 과 같아야 한다) */
+const IMAGE_BUCKET = 'chat-images';
+
+export type ImageUploadTicket = {
+  bucket: string;
+  /** 방/만료/서명이 들어간 경로 접두사. 뒤에 파일명을 붙여 올린다 */
+  prefix: string;
+  expiresAt: string;
+};
+
+/** 업로드 티켓: 방을 읽을 수 있는 사람에게만 발급된다 (10분 유효) */
+export async function createImageUploadTicket(
+  roomId: string
+): Promise<Result<ImageUploadTicket>> {
+  const res = await call<Record<string, unknown>>(
+    'create_image_upload_ticket',
+    { p_room_id: roomId }
+  );
+
+  if (!res.ok) return res;
+
+  const row = res.data ?? {};
+
+  return {
+    ok: true,
+    data: {
+      bucket: String(row.bucket ?? IMAGE_BUCKET),
+      prefix: String(row.prefix ?? ''),
+      expiresAt: String(row.expires_at ?? ''),
+    },
+  };
+}
+
+function randomFileName(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** 사진을 버킷에 올리고 메시지에 저장할 경로를 돌려준다 */
+export async function uploadChatImage(
+  roomId: string,
+  blob: Blob,
+  ext: string
+): Promise<Result<string>> {
+  const ticket = await createImageUploadTicket(roomId);
+
+  if (!ticket.ok) return ticket;
+
+  const path = `${ticket.data.prefix}/${randomFileName()}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from(ticket.data.bucket)
+    .upload(path, blob, {
+      contentType: blob.type || 'image/jpeg',
+      cacheControl: '31536000',
+      upsert: false,
+    });
+
+  if (error) return { ok: false, error: tr('chat.imageUpload') };
+
+  return { ok: true, data: path };
+}
+
+/** DB 에 저장된 경로를 실제 이미지 주소로 바꾼다 */
+export function chatImageUrl(path: string): string {
+  return supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
 export async function getRoomMembers(
