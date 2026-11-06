@@ -46,13 +46,6 @@ export const MAX_CONTEXT_MESSAGES = 24;
 export const MAX_MESSAGE_CHARS = 8_000;
 export const MAX_OUTPUT_TOKENS = 1_024;
 
-export const AI_SUGGESTIONS = [
-  '복리 이자가 뭔지 쉬운 예시로 설명해줘',
-  '입금이 늦어진 거래처에 보낼 정중한 독촉 메일 써줘',
-  '좁은 방에서 할 수 있는 20분 홈트 루틴 짜줘',
-  '고양이 입양 전에 꼭 알아야 할 것들 알려줘',
-];
-
 export const titleFrom = (text: string): string => {
   const cleaned = text.replace(/\s+/g, ' ').trim();
   if (!cleaned) return '새 대화';
