@@ -112,6 +112,18 @@ const dict = {
     'chat.readGroup': '읽음',
     'chat.unreadGroup': '안 읽음',
     'chat.readEmpty': '아직 없음',
+    'chat.block': '강퇴',
+    'chat.unblock': '차단 해제',
+    'chat.blockedBadge': '차단됨',
+    'chat.blockTitle': '이 멤버를 강퇴할까요?',
+    'chat.blockBody':
+      '{name}님은 이 방의 메시지 기록과 입력이 막힙니다. 계정 자체는 삭제되지 않고 그대로 남습니다.',
+    'chat.unblockTitle': '차단을 해제할까요?',
+    'chat.unblockBody': '{name}님이 이 방을 다시 보고 쓸 수 있게 됩니다.',
+    'chat.blockedRoomTitle': '이 방에서 차단되었습니다',
+    'chat.blockedRoomBody':
+      '방장이 이 방의 메시지 기록과 입력을 막았습니다. 계정은 그대로 남아 있으니, 다시 이용하려면 방장에게 문의해 주세요.',
+    'err.roomBlocked': '이 방에서 차단되어 메시지를 볼 수 없습니다.',
 
     'chat.settingsTitle': '방 설정',
     'chat.roomName': '방 이름',
@@ -247,6 +259,18 @@ const dict = {
     'chat.readGroup': 'Read',
     'chat.unreadGroup': 'Not yet',
     'chat.readEmpty': 'None yet',
+    'chat.block': 'Remove',
+    'chat.unblock': 'Undo',
+    'chat.blockedBadge': 'Blocked',
+    'chat.blockTitle': 'Remove this member?',
+    'chat.blockBody':
+      '{name} will no longer be able to read or send messages in this room. Their account stays as it is.',
+    'chat.unblockTitle': 'Undo this block?',
+    'chat.unblockBody': '{name} can read and send in this room again.',
+    'chat.blockedRoomTitle': 'You were blocked in this room',
+    'chat.blockedRoomBody':
+      'The room owner blocked the message history and sending here. Your account is unchanged — ask the owner if you want access again.',
+    'err.roomBlocked': 'You are blocked in this room.',
 
     'chat.settingsTitle': 'Room settings',
     'chat.roomName': 'Room name',
