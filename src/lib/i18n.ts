@@ -96,6 +96,13 @@ const dict = {
     'chat.actionFailed': '작업 중 오류가 발생했습니다.',
     'chat.rateLimit':
       '메시지는 1분에 {max}개까지 보낼 수 있어요. {n}초 뒤에 다시 보내 주세요.',
+    'chat.attachPhoto': '사진',
+    'chat.photoLabel': '사진',
+    'chat.photoRemove': '사진 삭제',
+    'chat.photoUploading': '사진 올리는 중...',
+    'chat.imageType': '이미지 파일만 올릴 수 있습니다. (JPG, PNG, WEBP, GIF)',
+    'chat.imageTooLarge': '이미지가 너무 큽니다. {mb}MB 이하만 올릴 수 있습니다.',
+    'chat.imageUpload': '사진을 올리지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
 
     'chat.membersTitle': '참여자',
     'chat.online': '접속 중',
@@ -224,6 +231,13 @@ const dict = {
     'chat.actionFailed': 'Something went wrong.',
     'chat.rateLimit':
       'You can send up to {max} messages per minute. Try again in {n}s.',
+    'chat.attachPhoto': 'Photo',
+    'chat.photoLabel': 'Photo',
+    'chat.photoRemove': 'Remove photo',
+    'chat.photoUploading': 'Uploading photo...',
+    'chat.imageType': 'Only image files can be uploaded (JPG, PNG, WEBP, GIF).',
+    'chat.imageTooLarge': 'That image is too large. Up to {mb}MB is allowed.',
+    'chat.imageUpload': 'Could not upload the photo. Please try again.',
 
     'chat.membersTitle': 'Members',
     'chat.online': 'Online',

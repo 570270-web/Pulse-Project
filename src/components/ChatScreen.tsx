@@ -25,6 +25,7 @@ import {
   Lock,
   MoreVertical,
   ExternalLink,
+  ImagePlus,
 } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase';
@@ -40,6 +41,8 @@ import {
   fetchMessagesAfter,
   fetchMessagePreviews,
   sendRoomMessage,
+  uploadChatImage,
+  chatImageUrl,
   getRoomMembers,
   markRoomRead,
   fetchRoomReadState,
@@ -55,6 +58,7 @@ import { dateLocale, translateSystemMessage, tr, useLang } from '@/lib/i18n';
 import LanguageToggle from '@/components/LanguageToggle';
 import NotificationToggle from '@/components/NotificationToggle';
 import { notifyNewMessage } from '@/lib/notify';
+import { MAX_IMAGE_MB, prepareImage } from '@/lib/image';
 
 type Props = {
   nickname: string;
@@ -275,6 +279,14 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
   const [linkError, setLinkError] = useState('');
   const [pendingLink, setPendingLink] = useState<string | null>(null);
 
+  /** 전송 대기 중인 사진 (미리보기 URL 은 objectURL 이라 반드시 해제한다) */
+  const [pendingImage, setPendingImage] = useState<{
+    blob: Blob;
+    ext: string;
+    preview: string;
+  } | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
   const [showMembers, setShowMembers] = useState(false);
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -292,6 +304,7 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   /**
    * 접속 표시(presence) 전용 채널.
@@ -1212,12 +1225,60 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
     inputRef.current?.focus();
   };
 
+  const clearPendingImage = () => {
+    setPendingImage((previous) => {
+      if (previous) URL.revokeObjectURL(previous.preview);
+
+      return null;
+    });
+  };
+
+  /** 고른 사진을 검사/축소해서 전송 대기 상태로 둔다 */
+  const pickImage = async (file: File) => {
+    setActionError('');
+
+    const prepared = await prepareImage(file);
+
+    if (!prepared.ok) {
+      setActionError(
+        prepared.reason === 'type'
+          ? tr('chat.imageType')
+          : tr('chat.imageTooLarge', { mb: MAX_IMAGE_MB })
+      );
+      return;
+    }
+
+    setPendingImage((previous) => {
+      if (previous) URL.revokeObjectURL(previous.preview);
+
+      return {
+        blob: prepared.blob,
+        ext: prepared.ext,
+        preview: URL.createObjectURL(prepared.blob),
+      };
+    });
+
+    inputRef.current?.focus();
+  };
+
+  /** 입력창에 이미지를 붙여넣으면 바로 첨부 */
+  const handleImagePaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    const file = Array.from(event.clipboardData.items)
+      .find((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      ?.getAsFile();
+
+    if (!file) return;
+
+    event.preventDefault();
+    void pickImage(file);
+  };
+
   const handleSend = async (event: React.FormEvent) => {
     event.preventDefault();
 
     const content = input.trim();
 
-    if (!content || sending || actionBusy) return;
+    if ((!content && !pendingImage) || sending || actionBusy) return;
 
     if (!editingMessage && cooldown > 0) return;
 
@@ -1255,7 +1316,33 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
         return;
       }
 
-      const result = await sendRoomMessage(content, room.id, replyTo?.id ?? null);
+      let attachmentPath: string | null = null;
+
+      if (pendingImage) {
+        setUploadingImage(true);
+
+        const uploaded = await uploadChatImage(
+          room.id,
+          pendingImage.blob,
+          pendingImage.ext
+        );
+
+        setUploadingImage(false);
+
+        if (!uploaded.ok) {
+          setActionError(uploaded.error);
+          return;
+        }
+
+        attachmentPath = uploaded.data;
+      }
+
+      const result = await sendRoomMessage(
+        content,
+        room.id,
+        replyTo?.id ?? null,
+        attachmentPath
+      );
 
       if (!result.ok) {
         setActionError(result.error);
@@ -1266,6 +1353,7 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
       sentTimesRef.current.push(Date.now());
       setInput('');
       setReplyTo(null);
+      clearPendingImage();
 
       if (hasNewerRef.current) {
         // 과거를 보고 있었다면 최신 구간으로 이동해서 내 메시지를 보여준다
@@ -1280,6 +1368,7 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
       setActionError(tr('chat.actionFailed'));
     } finally {
       setSending(false);
+      setUploadingImage(false);
       inputRef.current?.focus();
     }
   };
@@ -1492,7 +1581,10 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
         <p className="truncate text-xs opacity-80">
           {deleted
             ? tr('chat.deletedMessage')
-            : source?.content || tr('chat.originalUnavailable')}
+            : source?.content ||
+              (source?.attachment_path
+                ? tr('chat.photoLabel')
+                : tr('chat.originalUnavailable'))}
         </p>
       </div>
     );
@@ -1593,7 +1685,30 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
           {deleted ? (
             <span className="italic opacity-70">{tr('chat.deletedNotice')}</span>
           ) : (
-            renderMessageContent(message.content, own)
+            <>
+              {message.attachment_path && (
+                <a
+                  href={chatImageUrl(message.attachment_path)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block"
+                  title={tr('chat.photoLabel')}
+                >
+                  <img
+                    src={chatImageUrl(message.attachment_path)}
+                    alt={tr('chat.photoLabel')}
+                    loading="lazy"
+                    className={`max-h-72 w-auto max-w-full rounded-xl object-cover ${
+                      message.content ? 'mb-1.5' : ''
+                    }`}
+                  />
+                </a>
+              )}
+
+              {message.content
+                ? renderMessageContent(message.content, own)
+                : null}
+            </>
           )}
         </div>
         {editingMessage?.id === message.id && (
@@ -1777,7 +1892,10 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
   const showJumpButton = farFromBottom || hasNewer;
 
   const sendDisabled =
-    !input.trim() || sending || actionBusy || (!editingMessage && cooldown > 0);
+    (!input.trim() && !pendingImage) ||
+    sending ||
+    actionBusy ||
+    (!editingMessage && cooldown > 0);
 
   return (
     <div
@@ -2008,10 +2126,71 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
           </div>
         )}
 
+        {pendingImage && (
+          <div className="mx-auto mb-3 flex max-w-3xl items-center gap-3 rounded-xl border border-slate-200 bg-slate-100 p-2 dark:border-slate-700 dark:bg-slate-800">
+            <img
+              src={pendingImage.preview}
+              alt={tr('chat.photoLabel')}
+              className="h-16 w-16 shrink-0 rounded-lg object-cover"
+            />
+
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-slate-600 dark:text-slate-300">
+                {tr('chat.photoLabel')}
+              </p>
+              {uploadingImage && (
+                <p className="text-xs text-cyan-600 dark:text-cyan-400">
+                  {tr('chat.photoUploading')}
+                </p>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={clearPendingImage}
+              disabled={uploadingImage}
+              className="shrink-0 rounded-lg p-2 text-slate-500 transition hover:bg-slate-200 hover:text-slate-800 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-white"
+              title={tr('chat.photoRemove')}
+              aria-label={tr('chat.photoRemove')}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         <form
           onSubmit={handleSend}
           className="mx-auto flex max-w-3xl items-center gap-2 sm:gap-3"
         >
+          {!editingMessage && (
+            <>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+
+                  // 같은 파일을 다시 고를 수 있도록 비운다
+                  event.target.value = '';
+
+                  if (file) void pickImage(file);
+                }}
+              />
+
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                className="shrink-0 rounded-xl border border-slate-200 bg-slate-100 p-3.5 text-slate-500 hover:text-cyan-500 dark:border-slate-700 dark:bg-slate-800"
+                title={tr('chat.attachPhoto')}
+                aria-label={tr('chat.attachPhoto')}
+              >
+                <ImagePlus className="h-5 w-5" />
+              </button>
+            </>
+          )}
+
           {!editingMessage && (
             <button
               type="button"
@@ -2030,6 +2209,7 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
               type="text"
               value={input}
               onChange={(event) => handleInputChange(event.target.value)}
+              onPaste={handleImagePaste}
               placeholder={
                 editingMessage
                   ? tr('chat.phEdit')

@@ -37,4 +37,6 @@ export type Message = {
   reply_to_id?: string | null;
   deleted?: boolean;
   is_system?: boolean;
+  /** 버킷(chat-images) 안의 객체 경로. 있으면 사진이 달린 메시지 */
+  attachment_path?: string | null;
 };
