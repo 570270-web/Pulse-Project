@@ -217,14 +217,15 @@ export default function App() {
 
   return (
     <>
-      <div className={`${activeRoom ? 'hidden' : 'flex'} min-h-screen`}>
+      <div className={`${activeRoom ? 'hidden' : 'block'} min-h-screen`}>
         <AppSidebar
           active={screen}
           onNavigate={goToSection}
           onLogout={handleLogout}
         />
 
-        <div className="min-w-0 flex-1">
+        {/* 사이드바는 창에 고정(fixed)되어 있으므로 본문만 그 폭만큼 비켜 둔다 (w-14 = 3.5rem) */}
+        <div className="min-w-0 pl-14">
           <div className={hubHidden ? 'hidden' : 'block'}>
             {isAdmin ? (
               <AdminScreen
