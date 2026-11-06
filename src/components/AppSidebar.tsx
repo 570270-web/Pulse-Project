@@ -1,4 +1,4 @@
-import { LogOut, MessageCircle, Moon, Sparkles, Sun } from 'lucide-react';
+import { Activity, LogOut, MessageCircle, Moon, Sparkles, Sun } from 'lucide-react';
 
 import { useTheme } from '@/lib/useTheme';
 
@@ -36,7 +36,7 @@ export default function AppSidebar({
   return (
     <aside className="flex w-14 shrink-0 flex-col items-center gap-2 border-r border-slate-200 bg-white/80 py-3 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/70">
       <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 shadow-lg shadow-cyan-500/20">
-        <Sparkles className="h-5 w-5 text-white" strokeWidth={2.5} />
+        <Activity className="h-5 w-5 text-white" strokeWidth={2.5} />
       </div>
 
       <nav aria-label="주요 메뉴" className="flex flex-col items-center gap-1">
