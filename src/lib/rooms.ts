@@ -217,6 +217,38 @@ export async function getRoomMembers(
   };
 }
 
+/** 읽음 확인: 방 멤버 1명의 마지막 읽은 시각 */
+export type RoomReadPointer = {
+  nickname: string;
+  last_read_at: string | null;
+};
+
+/** 내가 이 방을 지금 읽었다고 서버에 알린다 */
+export async function markRoomRead(roomId: string): Promise<Result<string>> {
+  const res = await call<string>('mark_room_read', { p_room_id: roomId });
+
+  if (!res.ok) return res;
+
+  return { ok: true, data: String(res.data ?? '') };
+}
+
+/** 방 멤버들의 마지막 읽은 시각을 읽어온다 */
+export async function fetchRoomReadState(
+  roomId: string
+): Promise<Result<RoomReadPointer[]>> {
+  const res = await call<unknown>('get_room_read_state', { p_room_id: roomId });
+
+  if (!res.ok) return res;
+
+  return {
+    ok: true,
+    data: ((res.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      nickname: String(row.nickname ?? ''),
+      last_read_at: row.last_read_at ? String(row.last_read_at) : null,
+    })),
+  };
+}
+
 export async function renameRoom(
   roomId: string,
   name: string

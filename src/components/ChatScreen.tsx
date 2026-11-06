@@ -41,11 +41,14 @@ import {
   fetchMessagePreviews,
   sendRoomMessage,
   getRoomMembers,
+  markRoomRead,
+  fetchRoomReadState,
   renameRoom,
   updateRoomSecurity,
   refreshRoom,
   type MessagePreview,
   type RoomMember,
+  type RoomReadPointer,
 } from '@/lib/rooms';
 import { useTheme } from '@/lib/useTheme';
 import { dateLocale, translateSystemMessage, tr, useLang } from '@/lib/i18n';
@@ -260,6 +263,13 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
   const [onlineNicknames, setOnlineNicknames] = useState<string[]>([]);
   const [typingNicknames, setTypingNicknames] = useState<string[]>([]);
 
+  /** 방 멤버별 마지막 읽은 시각 — "읽음 N" 배지와 읽은 사람 목록에 쓴다 */
+  const [readPointers, setReadPointers] = useState<
+    Record<string, RoomReadPointer>
+  >({});
+  const [readListMessage, setReadListMessage] = useState<Message | null>(null);
+  const [readListMembers, setReadListMembers] = useState<string[]>([]);
+
   const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkError, setLinkError] = useState('');
@@ -315,6 +325,8 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
   const anchorRef = useRef<Anchor | null>(null);
   const lastLoadRef = useRef<'older' | 'newer' | 'live'>('live');
   const sentTimesRef = useRef<number[]>([]);
+  /** 읽음 기록 API 호출 스로틀 (2초에 한 번만) */
+  const lastMarkReadRef = useRef(0);
 
   const typingRef = useRef(false);
   const lastTypingSentRef = useRef(0);
@@ -360,6 +372,47 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
     },
     [nickname, room.id]
   );
+
+  /** 다른 사람들의 마지막 읽은 시각을 다시 불러온다 */
+  const refreshReadState = useCallback(async () => {
+    const res = await fetchRoomReadState(room.id);
+
+    if (!res.ok || !aliveRef.current) return;
+
+    const next: Record<string, RoomReadPointer> = {};
+
+    for (const pointer of res.data) {
+      next[pointer.nickname.toLocaleLowerCase()] = pointer;
+    }
+
+    setReadPointers(next);
+  }, [room.id]);
+
+  /** 탭이 보이고 맨 아래를 보고 있을 때만 "읽음"으로 기록한다 (2초 스로틀) */
+  const markReadNow = useCallback(() => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (!nearBottomRef.current) return;
+
+    const now = Date.now();
+
+    if (now - lastMarkReadRef.current < 2000) return;
+
+    lastMarkReadRef.current = now;
+    void markRoomRead(room.id);
+  }, [room.id]);
+
+  /** 읽은 사람 목록 모달을 연다 */
+  const openReadList = async (message: Message) => {
+    setReadListMessage(message);
+    setReadListMembers([]);
+    void refreshReadState();
+
+    const res = await getRoomMembers(room.id);
+
+    if (!aliveRef.current || !res.ok) return;
+
+    setReadListMembers(res.data.map((member) => member.nickname));
+  };
 
   /* ------------------------------------------------------------------ */
   /* 데이터 불러오기                                                      */
@@ -633,9 +686,18 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
   }, [room.id, nicknameLower, loadPreviewsFor, refreshRoomInfo]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => void pollTail(), 3000);
+    const timer = window.setInterval(() => {
+      void pollTail();
+      void refreshReadState();
+      // 위로 올려 읽다가 맨 아래로 돌아온 경우도 읽음으로 기록된다
+      markReadNow();
+    }, 3000);
     const onVisible = () => {
-      if (!document.hidden) void pollTail();
+      if (document.hidden) return;
+
+      void pollTail();
+      void refreshReadState();
+      markReadNow();
     };
 
     document.addEventListener('visibilitychange', onVisible);
@@ -648,7 +710,22 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
       window.removeEventListener('focus', onVisible);
       window.removeEventListener('online', onVisible);
     };
-  }, [pollTail]);
+  }, [pollTail, refreshReadState, markReadNow]);
+
+  /**
+   * 새 메시지가 화면에 붙으면 "읽음"으로 기록한다.
+   * 위로 올려 읽는 중이면 맨 아래로 돌아올 때 기록된다.
+   */
+  const lastMessageId = messages.length
+    ? messages[messages.length - 1].id
+    : '';
+
+  useEffect(() => {
+    if (!lastMessageId) return;
+
+    markReadNow();
+    void refreshReadState();
+  }, [lastMessageId, markReadNow, refreshReadState]);
 
   /**
    * 연결 감시: 탭이 백그라운드였다가 돌아오거나 인터넷이 다시 연결되면
@@ -1524,6 +1601,17 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
             {tr('chat.editing')}
           </span>
         )}
+
+        {own && !deleted && (
+          <button
+            type="button"
+            onClick={() => void openReadList(message)}
+            className="mt-1 self-end rounded-md px-1.5 py-0.5 text-[11px] font-medium text-cyan-600 transition hover:bg-cyan-50 dark:text-cyan-400 dark:hover:bg-cyan-500/10"
+            title={tr('chat.readTitle')}
+          >
+            {tr('chat.readCount', { n: readCountFor(message) })}
+          </button>
+        )}
       </div>
     );
 
@@ -1644,10 +1732,48 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
     return nodes;
   };
 
+  /** 내 메시지를 읽은 사람 수 (보낸 사람 본인 제외) */
+  const readCountFor = (message: Message): number => {
+    const at = new Date(message.created_at).getTime();
+
+    return Object.values(readPointers).filter(
+      (pointer) =>
+        pointer.nickname.toLocaleLowerCase() !== nicknameLower &&
+        pointer.last_read_at !== null &&
+        new Date(pointer.last_read_at).getTime() >= at
+    ).length;
+  };
+
+  /** 읽은 사람 / 안 읽은 사람 목록 */
+  const readSummaryFor = (message: Message) => {
+    const at = new Date(message.created_at).getTime();
+    const names = readListMembers.length
+      ? readListMembers
+      : Object.values(readPointers).map((pointer) => pointer.nickname);
+    const read: string[] = [];
+    const unread: string[] = [];
+
+    for (const name of names) {
+      if (name.toLocaleLowerCase() === nicknameLower) continue;
+
+      const pointer = readPointers[name.toLocaleLowerCase()];
+      const when = pointer?.last_read_at
+        ? new Date(pointer.last_read_at).getTime()
+        : 0;
+
+      (when >= at ? read : unread).push(name);
+    }
+
+    return { read, unread };
+  };
+
   const onlineLower = new Set(
     onlineNicknames.map((name) => name.toLocaleLowerCase())
   );
   const onlineCount = Math.max(onlineNicknames.length, 1);
+  const readListSummary: { read: string[]; unread: string[] } = readListMessage
+    ? readSummaryFor(readListMessage)
+    : { read: [], unread: [] };
   const showJumpButton = farFromBottom || hasNewer;
 
   const sendDisabled =
@@ -2032,6 +2158,62 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
               <ExternalLink className="h-4 w-4" />
               {tr('chat.open')}
             </a>
+          </div>
+        </ModalShell>
+      )}
+
+      {/* 읽은 사람 */}
+      {readListMessage && (
+        <ModalShell
+          title={`${tr('chat.readTitle')} · ${timeFormatter.format(
+            new Date(readListMessage.created_at)
+          )}`}
+          onClose={() => setReadListMessage(null)}
+        >
+          <div className="space-y-4">
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                {tr('chat.readGroup')} ({readListSummary.read.length})
+              </h3>
+              <div className="flex flex-wrap gap-1.5">
+                {readListSummary.read.length === 0 ? (
+                  <span className="text-sm text-slate-400 dark:text-slate-500">
+                    {tr('chat.readEmpty')}
+                  </span>
+                ) : (
+                  readListSummary.read.map((name) => (
+                    <span
+                      key={name}
+                      className="rounded-lg bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                    >
+                      {name}
+                    </span>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="border-t border-slate-200 pt-4 dark:border-slate-800">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                {tr('chat.unreadGroup')} ({readListSummary.unread.length})
+              </h3>
+              <div className="flex flex-wrap gap-1.5">
+                {readListSummary.unread.length === 0 ? (
+                  <span className="text-sm text-slate-400 dark:text-slate-500">
+                    {tr('chat.readEmpty')}
+                  </span>
+                ) : (
+                  readListSummary.unread.map((name) => (
+                    <span
+                      key={name}
+                      className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                    >
+                      {name}
+                    </span>
+                  ))
+                )}
+              </div>
+            </section>
           </div>
         </ModalShell>
       )}
