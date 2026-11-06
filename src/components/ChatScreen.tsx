@@ -1717,11 +1717,17 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
           </span>
         )}
 
-        {own && !deleted && (
+        {!deleted && (own || readCountFor(message) > 0) && (
           <button
             type="button"
             onClick={() => void openReadList(message)}
-            className="mt-1 self-end rounded-md px-1.5 py-0.5 text-[11px] font-medium text-cyan-600 transition hover:bg-cyan-50 dark:text-cyan-400 dark:hover:bg-cyan-500/10"
+            className={`mt-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium transition ${
+              own ? 'self-end' : 'self-start'
+            } ${
+              own
+                ? 'text-cyan-600 hover:bg-cyan-50 dark:text-cyan-400 dark:hover:bg-cyan-500/10'
+                : 'text-slate-400 hover:bg-slate-100 dark:text-slate-500 dark:hover:bg-slate-800'
+            }`}
             title={tr('chat.readTitle')}
           >
             {tr('chat.readCount', { n: readCountFor(message) })}
@@ -1847,21 +1853,23 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
     return nodes;
   };
 
-  /** 내 메시지를 읽은 사람 수 (보낸 사람 본인 제외) */
+  /** 메시지를 읽은 사람 수 (보낸 사람 본인 제외) */
   const readCountFor = (message: Message): number => {
     const at = new Date(message.created_at).getTime();
+    const author = message.nickname.toLocaleLowerCase();
 
     return Object.values(readPointers).filter(
       (pointer) =>
-        pointer.nickname.toLocaleLowerCase() !== nicknameLower &&
+        pointer.nickname.toLocaleLowerCase() !== author &&
         pointer.last_read_at !== null &&
         new Date(pointer.last_read_at).getTime() >= at
     ).length;
   };
 
-  /** 읽은 사람 / 안 읽은 사람 목록 */
+  /** 읽은 사람 / 안 읽은 사람 목록 (보낸 사람 본인 제외) */
   const readSummaryFor = (message: Message) => {
     const at = new Date(message.created_at).getTime();
+    const author = message.nickname.toLocaleLowerCase();
     const names = readListMembers.length
       ? readListMembers
       : Object.values(readPointers).map((pointer) => pointer.nickname);
@@ -1869,7 +1877,7 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
     const unread: string[] = [];
 
     for (const name of names) {
-      if (name.toLocaleLowerCase() === nicknameLower) continue;
+      if (name.toLocaleLowerCase() === author) continue;
 
       const pointer = readPointers[name.toLocaleLowerCase()];
       const when = pointer?.last_read_at
@@ -2345,9 +2353,11 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
       {/* 읽은 사람 */}
       {readListMessage && (
         <ModalShell
-          title={`${tr('chat.readTitle')} · ${timeFormatter.format(
-            new Date(readListMessage.created_at)
-          )}`}
+          title={`${tr('chat.readTitle')} · ${
+            readListMessage.nickname.toLocaleLowerCase() === nicknameLower
+              ? ''
+              : `${readListMessage.nickname} · `
+          }${timeFormatter.format(new Date(readListMessage.created_at))}`}
           onClose={() => setReadListMessage(null)}
         >
           <div className="space-y-4">
