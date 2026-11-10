@@ -115,6 +115,9 @@ const dict = {
     'chat.block': '강퇴',
     'chat.unblock': '차단 해제',
     'chat.blockedBadge': '차단됨',
+    'chat.blockedList': '차단 목록',
+    'chat.blockedEmpty': '차단된 멤버가 없어요.',
+    'chat.blockedLeft': '이미 나간 멤버',
     'chat.blockTitle': '이 멤버를 강퇴할까요?',
     'chat.blockBody':
       '{name}님은 이 방의 메시지 기록과 입력이 막힙니다. 계정 자체는 삭제되지 않고 그대로 남습니다.',
@@ -262,6 +265,9 @@ const dict = {
     'chat.block': 'Remove',
     'chat.unblock': 'Undo',
     'chat.blockedBadge': 'Blocked',
+    'chat.blockedList': 'Blocked',
+    'chat.blockedEmpty': 'No blocked members.',
+    'chat.blockedLeft': 'Left the room',
     'chat.blockTitle': 'Remove this member?',
     'chat.blockBody':
       '{name} will no longer be able to read or send messages in this room. Their account stays as it is.',
