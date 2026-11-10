@@ -322,6 +322,35 @@ export async function setRoomMemberBlocked(
   return { ok: true, data: res.data === true };
 }
 
+/** 차단 목록 항목 (이미 나간 멤버도 포함된다) */
+export type BlockedMember = {
+  nickname: string;
+  blocked_at: string;
+  blocked_by: string | null;
+  is_member: boolean;
+};
+
+/** 방의 차단 목록 — 참가자 목록과 따로 보여준다 */
+export async function getRoomBlockedMembers(
+  roomId: string
+): Promise<Result<BlockedMember[]>> {
+  const res = await call<unknown>('get_room_blocked_members', {
+    p_room_id: roomId,
+  });
+
+  if (!res.ok) return res;
+
+  return {
+    ok: true,
+    data: ((res.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      nickname: String(row.nickname ?? ''),
+      blocked_at: String(row.blocked_at ?? ''),
+      blocked_by: row.blocked_by == null ? null : String(row.blocked_by),
+      is_member: row.is_member === true,
+    })),
+  };
+}
+
 /** 읽음 확인: 방 멤버 1명의 마지막 읽은 시각 */
 export type RoomReadPointer = {
   nickname: string;
