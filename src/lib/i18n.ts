@@ -14,7 +14,8 @@ function readStoredLang(): Lang {
     // 저장소를 쓸 수 없으면 기본값
   }
 
-  return 'ko';
+  // 새로 온 사람(새 계정)은 영어로 시작한다
+  return 'en';
 }
 
 let currentLang: Lang = readStoredLang();
@@ -51,6 +52,13 @@ const dict = {
     'notify.title': '{room}',
     'guard.turnOn': '새로고침·탭 닫기 전에 확인창 띄우기',
     'guard.turnOff': '새로고침·탭 닫기 확인창 끄기',
+    'nav.chat': '채팅',
+    'nav.ai': 'AI',
+    'menu.account': '계정 메뉴',
+    'menu.dark': '다크 모드',
+    'menu.light': '라이트 모드',
+    'menu.language': '언어',
+    'menu.logout': '로그아웃',
     'chat.options': '설정 메뉴',
     'chat.language': '언어',
     'chat.notify': '알림',
@@ -211,6 +219,13 @@ const dict = {
     'notify.title': '{room}',
     'guard.turnOn': 'Ask before reloading or closing the tab',
     'guard.turnOff': 'Stop asking before leaving the page',
+    'nav.chat': 'Chat',
+    'nav.ai': 'AI',
+    'menu.account': 'Account menu',
+    'menu.dark': 'Dark mode',
+    'menu.light': 'Light mode',
+    'menu.language': 'Language',
+    'menu.logout': 'Log out',
     'chat.options': 'Options',
     'chat.language': 'Language',
     'chat.notify': 'Notifications',
