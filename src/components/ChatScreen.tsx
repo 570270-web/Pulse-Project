@@ -11,11 +11,8 @@ import {
   Loader2,
   ArrowLeft,
   Hash,
-  Sun,
-  Moon,
   Reply,
   X,
-  Settings,
   Link as LinkIcon,
   Pencil,
   Trash2,
@@ -56,11 +53,8 @@ import {
   type RoomMember,
   type RoomReadPointer,
 } from '@/lib/rooms';
-import { useTheme } from '@/lib/useTheme';
 import { dateLocale, translateSystemMessage, tr, useLang } from '@/lib/i18n';
-import LanguageToggle from '@/components/LanguageToggle';
-import NotificationToggle from '@/components/NotificationToggle';
-import LeaveGuardToggle from '@/components/LeaveGuardToggle';
+import ChatOptionsMenu from '@/components/ChatOptionsMenu';
 import { notifyNewMessage } from '@/lib/notify';
 import { MAX_IMAGE_MB, prepareImage } from '@/lib/image';
 
@@ -240,7 +234,7 @@ function ModalShell({
 }
 
 export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
-  const { theme, toggleTheme } = useTheme();
+  
   useLang(); // 언어가 바뀌면 화면을 다시 그린다
   const nicknameLower = nickname.toLocaleLowerCase();
 
@@ -2098,36 +2092,10 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
             </span>
           </button>
 
-          {canManage && (
-            <button
-              type="button"
-              onClick={() => void openSettings()}
-              title={tr('chat.settings')}
-              aria-label={tr('chat.settings')}
-              className="rounded-lg border border-slate-200 bg-slate-100 p-2 text-slate-500 transition hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400 dark:hover:text-white"
-            >
-              <Settings className="h-4 w-4" />
-            </button>
-          )}
-
-          <LeaveGuardToggle />
-
-          <NotificationToggle />
-
-          <LanguageToggle />
-
-          <button
-            type="button"
-            onClick={toggleTheme}
-            title={tr('chat.theme')}
-            className="rounded-lg border border-slate-200 bg-slate-100 p-2 text-slate-500 transition hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400 dark:hover:text-white"
-          >
-            {theme === 'dark' ? (
-              <Sun className="h-4 w-4" />
-            ) : (
-              <Moon className="h-4 w-4" />
-            )}
-          </button>
+          <ChatOptionsMenu
+            canManage={canManage}
+            onOpenRoomSettings={() => void openSettings()}
+          />
 
           <div className="hidden items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5 md:flex dark:bg-slate-800/60">
             <div

@@ -15,13 +15,12 @@ import {
 } from '@/lib/auth';
 
 type HubScreenProps = {
-  nickname: string;
   onEnterRoom: (room: RoomSummary) => void;
 };
 
 type HubTab = 'joined' | 'find';
 
-export default function HubScreen({ nickname, onEnterRoom }: HubScreenProps) {
+export default function HubScreen({ onEnterRoom }: HubScreenProps) {
   const [confirmRoomAction, setConfirmRoomAction] =
     useState<RoomSummary | null>(null);
 
@@ -388,17 +387,6 @@ export default function HubScreen({ nickname, onEnterRoom }: HubScreenProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="hidden items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5 sm:flex dark:bg-slate-800/60">
-              <div className={`flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br ${getAvatarColor(nickname)} text-sm font-bold text-white`}>
-                {nickname.charAt(0).toUpperCase()}
-              </div>
-              <span className="max-w-36 truncate text-sm font-medium text-slate-700 dark:text-slate-200">
-                {nickname}
-              </span>
-            </div>
-
-          </div>
         </div>
       </header>
 
