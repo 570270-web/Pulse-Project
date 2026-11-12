@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Activity,
   Languages,
+  LifeBuoy,
   LogOut,
   MessageCircle,
   Moon,
@@ -10,7 +11,7 @@ import {
   Sun,
 } from 'lucide-react';
 
-import { useLang } from '@/lib/i18n';
+import { tr, useLang } from '@/lib/i18n';
 import { useTheme } from '@/lib/useTheme';
 import LeaveGuardToggle from '@/components/LeaveGuardToggle';
 
@@ -21,6 +22,8 @@ type AppSidebarProps = {
   nickname: string;
   onNavigate: (section: AppSection) => void;
   onLogout: () => void;
+  /** 관리자 계정은 문의를 보낼 수 없어서 넘기지 않는다 */
+  onOpenSupport?: () => void;
 };
 
 const NAV_ITEMS = [
@@ -51,6 +54,7 @@ export default function AppSidebar({
   nickname,
   onNavigate,
   onLogout,
+  onOpenSupport,
 }: AppSidebarProps) {
   const { theme, toggleTheme } = useTheme();
   const { lang, setLang } = useLang();
@@ -186,6 +190,21 @@ export default function AppSidebar({
                 {lang === 'ko' ? '한국어' : 'English'}
               </span>
             </button>
+
+            {onOpenSupport && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  onOpenSupport();
+                }}
+                className={MENU_ITEM_CLASS}
+              >
+                <LifeBuoy className="h-4 w-4 shrink-0 text-slate-400" />
+                {tr('support.title')}
+              </button>
+            )}
 
             <div className="my-1 h-px bg-slate-200 dark:bg-slate-700" />
 

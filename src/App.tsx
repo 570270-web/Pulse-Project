@@ -5,7 +5,7 @@ import AdminScreen from '@/components/AdminScreen';
 import HubScreen from '@/components/HubScreen';
 import AiScreen from '@/components/AiScreen';
 import AppSidebar, { type AppSection } from '@/components/AppSidebar';
-import SupportButton from '@/components/SupportButton';
+import SupportChat from '@/components/SupportChat';
 import { getToken, clearToken } from '@/lib/supabase';
 import { getSessionNickname, checkIsAdmin } from '@/lib/auth';
 import type { RoomSummary } from '@/lib/auth';
@@ -20,6 +20,7 @@ export default function App() {
   const [screen, setScreen] = useState<AppSection>('hub');
   // AI 화면은 한 번 열면 계속 살려 둔다(다른 탭에 다녀와도 대화와 답변이 유지되도록).
   const [aiMounted, setAiMounted] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   const [checking, setChecking] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
@@ -223,6 +224,9 @@ export default function App() {
           nickname={nickname}
           onNavigate={goToSection}
           onLogout={handleLogout}
+          onOpenSupport={
+            isAdmin ? undefined : () => setSupportOpen(true)
+          }
         />
 
         {/* 사이드바는 창에 고정(fixed)되어 있으므로 본문만 그 폭만큼 비켜 둔다 (w-14 = 3.5rem) */}
@@ -236,10 +240,7 @@ export default function App() {
                 active={!hubHidden}
               />
             ) : (
-              <>
-                <HubScreen onEnterRoom={handleEnterRoom} />
-                <SupportButton />
-              </>
+              <HubScreen onEnterRoom={handleEnterRoom} />
             )}
           </div>
 
@@ -252,6 +253,11 @@ export default function App() {
       </div>
 
       {chat}
+
+      {/* 관리자 문의는 사이드바 계정 메뉴에서 연다 */}
+      {supportOpen && (
+        <SupportChat mode="user" onClose={() => setSupportOpen(false)} />
+      )}
     </>
   );
 }
