@@ -220,6 +220,7 @@ export default function App() {
       <div className={`${activeRoom ? 'hidden' : 'block'} min-h-screen`}>
         <AppSidebar
           active={screen}
+          nickname={nickname}
           onNavigate={goToSection}
           onLogout={handleLogout}
         />
@@ -236,7 +237,7 @@ export default function App() {
               />
             ) : (
               <>
-                <HubScreen nickname={nickname} onEnterRoom={handleEnterRoom} />
+                <HubScreen onEnterRoom={handleEnterRoom} />
                 <SupportButton />
               </>
             )}
