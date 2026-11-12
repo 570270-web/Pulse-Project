@@ -27,6 +27,25 @@ type Props = {
 
 const ITEM_CLASS =
   'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800';
+const ON_TEXT = 'font-semibold text-emerald-700 dark:text-emerald-300';
+
+/** 켜짐/꺼짐을 한눈에 보여주는 작은 스위치 */
+function Switch({ on }: { on: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex h-4 w-7 shrink-0 items-center rounded-full p-0.5 transition ${
+        on ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+      }`}
+    >
+      <span
+        className={`h-3 w-3 rounded-full bg-white shadow transition ${
+          on ? 'translate-x-3' : ''
+        }`}
+      />
+    </span>
+  );
+}
 
 /**
  * 채팅 화면 오른쪽 위 톱니바퀴 메뉴.
@@ -158,37 +177,45 @@ export default function ChatOptionsMenu({
           {notifyState !== 'unsupported' && (
             <button
               type="button"
-              role="menuitem"
+              role="menuitemcheckbox"
+              aria-checked={notifyState === 'on'}
               onClick={() => void handleNotify()}
               className={ITEM_CLASS}
             >
               {notifyState === 'on' ? (
-                <Bell className="h-4 w-4 shrink-0 text-slate-400" />
+                <Bell className="h-4 w-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
               ) : (
                 <BellOff className="h-4 w-4 shrink-0 text-slate-400" />
               )}
-              <span className="flex-1">{tr('chat.notify')}</span>
-              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                {notifyState === 'on' ? tr('common.on') : tr('common.off')}
+              <span
+                className={`flex-1 ${
+                  notifyState === 'on' ? ON_TEXT : ''
+                }`}
+              >
+                {tr('chat.notify')}
               </span>
+              <Switch on={notifyState === 'on'} />
             </button>
           )}
 
           <button
             type="button"
-            role="menuitem"
+            role="menuitemcheckbox"
+            aria-checked={leaveGuard.on}
             onClick={leaveGuard.toggle}
             className={ITEM_CLASS}
           >
             {leaveGuard.on ? (
-              <ShieldCheck className="h-4 w-4 shrink-0 text-slate-400" />
+              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
             ) : (
               <ShieldAlert className="h-4 w-4 shrink-0 text-slate-400" />
             )}
-            <span className="flex-1">{tr('chat.leaveGuard')}</span>
-            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-              {leaveGuard.on ? tr('common.on') : tr('common.off')}
+            <span
+              className={`flex-1 ${leaveGuard.on ? ON_TEXT : ''}`}
+            >
+              {tr('chat.leaveGuard')}
             </span>
+            <Switch on={leaveGuard.on} />
           </button>
 
           {hint && (
