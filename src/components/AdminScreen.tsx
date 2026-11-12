@@ -1709,6 +1709,9 @@ export default function AdminScreen({
                     </div>
                     <span className="truncate text-slate-400">
                       {row.user_agent || 'unknown device'}
+                      {row.fingerprint
+                        ? ` · fp ${row.fingerprint.slice(0, 8)}`
+                        : ''}
                     </span>
                   </li>
                 ))}
