@@ -67,102 +67,18 @@ export function getDeviceId(): string {
   }
 }
 
-function fnv1a(input: string): string {
-  let hash = 2166136261;
-
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return (hash >>> 0).toString(16).padStart(8, '0');
-}
-
-function canvasSignature(): string {
-  try {
-    const canvas = document.createElement('canvas');
-    canvas.width = 200;
-    canvas.height = 40;
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) return '';
-
-    ctx.textBaseline = 'top';
-    ctx.font = '14px Arial';
-    ctx.fillStyle = '#f60';
-    ctx.fillRect(0, 0, 100, 20);
-    ctx.fillStyle = '#069';
-    ctx.fillText('Pulse device', 2, 4);
-
-    return canvas.toDataURL().slice(-80);
-  } catch {
-    return '';
-  }
-}
-
-function webglSignature(): string {
-  try {
-    const canvas = document.createElement('canvas');
-    const gl = canvas.getContext('webgl');
-
-    if (!gl) return '';
-
-    const debug = gl.getExtension('WEBGL_debug_renderer_info');
-
-    if (!debug) return '';
-
-    return `${String(gl.getParameter(debug.UNMASKED_VENDOR_WEBGL))}|${String(
-      gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)
-    )}`;
-  } catch {
-    return '';
-  }
-}
-
-/**
- * 브라우저 특성으로 만든 기기 지문. 저장소를 지워도 같은 기기로 인식되게 한다.
- * 여러 명이 함께 쓰는 PC 에서 오탐이 나지 않도록 서버가 공유 여부를 함께 본다.
- */
-export function getDeviceFingerprint(): string {
-  try {
-    const nav = navigator as Navigator & { deviceMemory?: number };
-    const traits = [
-      navigator.userAgent,
-      navigator.language,
-      (navigator.languages ?? []).join(','),
-      String(screen.width),
-      String(screen.height),
-      String(screen.colorDepth),
-      String(window.devicePixelRatio),
-      String(new Date().getTimezoneOffset()),
-      Intl.DateTimeFormat().resolvedOptions().timeZone ?? '',
-      String(navigator.hardwareConcurrency ?? ''),
-      String(nav.deviceMemory ?? ''),
-      String(navigator.maxTouchPoints ?? ''),
-    ].join('|');
-
-    const graphics = `${canvasSignature()}|${webglSignature()}`;
-
-    return fnv1a(traits) + fnv1a(`${graphics}|${traits.length}`);
-  } catch {
-    return '';
-  }
-}
-
 const deviceId = getDeviceId();
-const deviceFingerprint = getDeviceFingerprint();
 
 const deviceHeaders: Record<string, string> = {};
 
 if (deviceId) deviceHeaders['x-pulse-device'] = deviceId;
-if (deviceFingerprint) deviceHeaders['x-pulse-fingerprint'] = deviceFingerprint;
 
 export const supabase: SupabaseClient = createClient(
   supabaseUrl ?? 'https://placeholder.supabase.co',
   supabaseAnonKey ?? 'placeholder-anon-key',
   {
     auth: { persistSession: false },
-    // 모든 RPC 호출에 기기 ID·지문을 같이 보낸다 (서버가 기기 밴을 판정)
+    // 모든 RPC 호출에 기기 ID 를 같이 보낸다 (서버가 기기 밴을 판정)
     global: {
       headers: deviceHeaders,
     },
