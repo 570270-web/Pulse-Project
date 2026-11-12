@@ -92,6 +92,15 @@ function parseError(message: string): string {
   if (normalized.includes('NICKNAME_NOT_FOUND')) {
     return 'Nickname not found.';
   }
+  if (normalized.includes('IP_BANNED')) {
+    return 'This network has been blocked by an administrator.';
+  }
+  if (normalized.includes('CANNOT_BAN_ADMIN')) {
+    return 'Administrator accounts cannot be blocked.';
+  }
+  if (normalized.includes('CANNOT_BAN_SELF')) {
+    return 'You cannot block your own account.';
+  }
   if (normalized.includes('NOT_ADMIN')) {
     return 'Administrator permission required.';
   }
@@ -279,6 +288,102 @@ export async function deleteProfile(nickname: string): Promise<boolean> {
   return !error;
 }
  
+export type AccountIp = {
+  ip: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  banned: boolean;
+  /** 같은 IP를 쓰는 다른 계정 수 */
+  other_accounts: number;
+};
+
+export type IpBan = {
+  ip: string;
+  nickname: string | null;
+  reason: string | null;
+  banned_by: string | null;
+  created_at: string;
+};
+
+/** 관리자: 한 계정이 접속한 IP 목록 (밴 여부 포함) */
+export async function listAccountIps(
+  nickname: string
+): Promise<AccountIp[]> {
+  const token = getToken();
+  if (!token) return [];
+
+  const { data, error } = await supabase.rpc('admin_list_account_ips', {
+    p_token: token,
+    p_nickname: nickname,
+  });
+
+  if (error || !data) return [];
+
+  return (data as Array<Record<string, unknown>>).map((row) => ({
+    ip: String(row.ip ?? ''),
+    first_seen_at: String(row.first_seen_at ?? ''),
+    last_seen_at: String(row.last_seen_at ?? ''),
+    banned: row.banned === true,
+    other_accounts: Number(row.other_accounts ?? 0),
+  }));
+}
+
+/** 관리자: 계정이 쓴 모든 IP를 차단 (차단된 IP 개수 반환) */
+export async function banAccountIps(
+  nickname: string,
+  reason: string
+): Promise<{ ok: boolean; count?: number; error?: string }> {
+  const token = getToken();
+  if (!token) {
+    return { ok: false, error: 'Session expired. Please log in again.' };
+  }
+
+  const { data, error } = await supabase.rpc('admin_ban_account_ips', {
+    p_token: token,
+    p_nickname: nickname,
+    p_reason: reason.trim() ? reason.trim() : null,
+  });
+
+  if (error) {
+    return { ok: false, error: parseError(error.message) };
+  }
+
+  return { ok: true, count: Number(data ?? 0) };
+}
+
+/** 관리자: 현재 IP 차단 목록 */
+export async function listIpBans(): Promise<IpBan[]> {
+  const token = getToken();
+  if (!token) return [];
+
+  const { data, error } = await supabase.rpc('admin_list_ip_bans', {
+    p_token: token,
+  });
+
+  if (error || !data) return [];
+
+  return (data as Array<Record<string, unknown>>).map((row) => ({
+    ip: String(row.ip ?? ''),
+    nickname: row.nickname == null ? null : String(row.nickname),
+    reason: row.reason == null ? null : String(row.reason),
+    banned_by: row.banned_by == null ? null : String(row.banned_by),
+    created_at: String(row.created_at ?? ''),
+  }));
+}
+
+/** 관리자: IP 하나 차단 해제 */
+export async function unbanIp(ip: string): Promise<boolean> {
+  const token = getToken();
+  if (!token) return false;
+
+  const { error } = await supabase.rpc('admin_unban_ip', {
+    p_token: token,
+    p_ip: ip,
+  });
+
+  return !error;
+}
+
 export async function clearAllMessages(): Promise<boolean> {
   const token = getToken();
   if (!token) return false;
