@@ -60,6 +60,7 @@ import { useTheme } from '@/lib/useTheme';
 import { dateLocale, translateSystemMessage, tr, useLang } from '@/lib/i18n';
 import LanguageToggle from '@/components/LanguageToggle';
 import NotificationToggle from '@/components/NotificationToggle';
+import LeaveGuardToggle from '@/components/LeaveGuardToggle';
 import { notifyNewMessage } from '@/lib/notify';
 import { MAX_IMAGE_MB, prepareImage } from '@/lib/image';
 
@@ -2108,6 +2109,8 @@ export default function ChatScreen({ nickname, room, onBackToHub }: Props) {
               <Settings className="h-4 w-4" />
             </button>
           )}
+
+          <LeaveGuardToggle />
 
           <NotificationToggle />
 

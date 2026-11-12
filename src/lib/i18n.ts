@@ -49,6 +49,8 @@ const dict = {
     'notify.turnOff': '새 메시지 알림 끄기',
     'notify.blocked': '브라우저에서 알림이 차단되어 있어요. 주소창 옆 자물쇠 설정에서 알림을 허용해 주세요.',
     'notify.title': '{room}',
+    'guard.turnOn': '새로고침·탭 닫기 전에 확인창 띄우기',
+    'guard.turnOff': '새로고침·탭 닫기 확인창 끄기',
 
     'chat.backToHub': '방 목록으로',
     'chat.reply': '답장',
@@ -199,6 +201,8 @@ const dict = {
     'notify.turnOff': 'Turn off new message notifications',
     'notify.blocked': 'Notifications are blocked in your browser. Allow them from the lock icon next to the address bar.',
     'notify.title': '{room}',
+    'guard.turnOn': 'Ask before reloading or closing the tab',
+    'guard.turnOff': 'Stop asking before leaving the page',
 
     'chat.backToHub': 'Back to rooms',
     'chat.reply': 'Reply',
