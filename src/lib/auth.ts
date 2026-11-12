@@ -291,6 +291,7 @@ export async function deleteProfile(nickname: string): Promise<boolean> {
 export type AccountDevice = {
   device_id: string;
   user_agent: string | null;
+  fingerprint: string | null;
   first_seen_at: string;
   last_seen_at: string;
   banned: boolean;
@@ -302,6 +303,7 @@ export type DeviceBan = {
   device_id: string;
   nickname: string | null;
   user_agent: string | null;
+  fingerprint: string | null;
   reason: string | null;
   banned_by: string | null;
   created_at: string;
@@ -324,6 +326,8 @@ export async function listAccountDevices(
   return (data as Array<Record<string, unknown>>).map((row) => ({
     device_id: String(row.device_id ?? ''),
     user_agent: row.user_agent == null ? null : String(row.user_agent),
+    fingerprint:
+      row.fingerprint == null ? null : String(row.fingerprint),
     first_seen_at: String(row.first_seen_at ?? ''),
     last_seen_at: String(row.last_seen_at ?? ''),
     banned: row.banned === true,
@@ -369,6 +373,8 @@ export async function listDeviceBans(): Promise<DeviceBan[]> {
     device_id: String(row.device_id ?? ''),
     nickname: row.nickname == null ? null : String(row.nickname),
     user_agent: row.user_agent == null ? null : String(row.user_agent),
+    fingerprint:
+      row.fingerprint == null ? null : String(row.fingerprint),
     reason: row.reason == null ? null : String(row.reason),
     banned_by: row.banned_by == null ? null : String(row.banned_by),
     created_at: String(row.created_at ?? ''),
