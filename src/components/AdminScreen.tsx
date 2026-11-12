@@ -32,7 +32,13 @@ import {
   deleteProfile,
   logout,
   adminResetAccountPassword,
+  listAccountIps,
+  banAccountIps,
+  listIpBans,
+  unbanIp,
+  type AccountIp,
   type AdminProfile,
+  type IpBan,
   type RoomSummary,
 } from '@/lib/auth';
 import { adminListSupportThreads, type SupportThreadRow } from '@/lib/rooms';
@@ -51,7 +57,7 @@ type Props = {
   active?: boolean;
 };
  
-type Tab = 'users' | 'rooms' | 'support' | 'announcements';
+type Tab = 'users' | 'rooms' | 'support' | 'ipbans' | 'announcements';
 type RoomSection = 'rooms' | 'requests';
  
 type AdminRoom = RoomSummary & {
@@ -251,6 +257,15 @@ export default function AdminScreen({
   const [actionBusy, setActionBusy] = useState(false);
   const [confirmAction, setConfirmAction] =
     useState<ConfirmAction>(null);
+
+  // IP 차단: 계정별 IP 목록 + 전체 차단 목록
+  const [ipBans, setIpBans] = useState<IpBan[]>([]);
+  const [loadingBans, setLoadingBans] = useState(true);
+  const [banTarget, setBanTarget] = useState<string | null>(null);
+  const [banIps, setBanIps] = useState<AccountIp[]>([]);
+  const [banIpsLoading, setBanIpsLoading] = useState(false);
+  const [banReason, setBanReason] = useState('');
+  const [banBusy, setBanBusy] = useState(false);
  
   const [resetTarget, setResetTarget] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
@@ -369,9 +384,21 @@ export default function AdminScreen({
       setError(`Could not load inquiries: ${res.error}`);
     }
  
-    setLoadingSupport(false);
+        setLoadingSupport(false);
   }, []);
- 
+
+  const loadIpBans = useCallback(async () => {
+    setLoadingBans(true);
+
+    try {
+      setIpBans(await listIpBans());
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoadingBans(false);
+    }
+  }, []);
+
   // 관리자 화면에 들어오면 전부 한 번씩 먼저 불러온다
   // (카운트와 배지가 각 탭에 들어가기 전에도 정확히 보이도록)
   useEffect(() => {
@@ -379,7 +406,8 @@ export default function AdminScreen({
     void loadRooms();
     void loadRequests();
     void loadSupport();
-  }, [loadProfiles, loadRooms, loadRequests, loadSupport]);
+    void loadIpBans();
+  }, [loadProfiles, loadRooms, loadRequests, loadSupport, loadIpBans]);
  
   // 방에서 돌아오면 화면은 그대로 보여주고, 뒤에서 조용히 새로고침한다
   const wasActive = useRef(true);
@@ -390,11 +418,19 @@ export default function AdminScreen({
       void loadProfiles();
       void loadRooms();
       void loadRequests();
-      void loadSupport();
+            void loadSupport();
+      void loadIpBans();
     }
- 
+
     wasActive.current = active;
-  }, [active, loadProfiles, loadRooms, loadRequests, loadSupport]);
+  }, [
+    active,
+    loadProfiles,
+    loadRooms,
+    loadRequests,
+    loadSupport,
+    loadIpBans,
+  ]);
  
   // 문의 배지는 가끔 새로 읽는다
   useEffect(() => {
@@ -510,6 +546,78 @@ export default function AdminScreen({
     setOpenThread(row.user_nickname);
   };
  
+  const openBanModal = async (target: string) => {
+    clearNotices();
+    setBanTarget(target);
+    setBanReason('');
+    setBanIps([]);
+    setBanIpsLoading(true);
+
+    try {
+      setBanIps(await listAccountIps(target));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBanIpsLoading(false);
+    }
+  };
+
+  const closeBanModal = () => {
+    setBanTarget(null);
+    setBanReason('');
+    setBanIps([]);
+  };
+
+  const handleBanAccount = async () => {
+    if (!banTarget || banBusy) return;
+
+    setBanBusy(true);
+    clearNotices();
+
+    try {
+      const result = await banAccountIps(banTarget, banReason);
+
+      if (!result.ok) {
+        setError(result.error ?? 'Failed to block this account.');
+        return;
+      }
+
+      if (!result.count) {
+        setError(
+          `No IP was recorded for "${banTarget}". They get one on their next login.`
+        );
+        return;
+      }
+
+      closeBanModal();
+      setSuccess(
+        `Blocked ${result.count} IP${
+          result.count === 1 ? '' : 's'
+        } used by "${banTarget}".`
+      );
+      await loadIpBans();
+      await loadProfiles();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBanBusy(false);
+    }
+  };
+
+  const handleUnban = async (ip: string) => {
+    clearNotices();
+
+    const ok = await unbanIp(ip);
+
+    if (!ok) {
+      setError('Could not unblock this IP.');
+      return;
+    }
+
+    setSuccess(`Unblocked ${ip}.`);
+    await loadIpBans();
+  };
+
   const handleAccountPasswordReset = async () => {
     if (!resetTarget || resetting) return;
  
@@ -927,13 +1035,30 @@ export default function AdminScreen({
  
           <button
             onClick={() => {
-              setTab('announcements');
+              setTab('ipbans');
               clearNotices();
+              void loadIpBans();
             }}
-            className={tabClass('announcements')}
+            className={tabClass('ipbans')}
           >
-            Announcements
+            <Ban className="h-4 w-4" />
+            IP bans
+            {ipBans.length > 0 && (
+              <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-xs text-red-700 dark:text-red-300">
+                {ipBans.length}
+              </span>
+            )}
           </button>
+
+            <button
+              onClick={() => {
+                setTab('announcements');
+                clearNotices();
+              }}
+              className={tabClass('announcements')}
+            >
+              Announcements
+            </button>
         </div>
  
         {success && (
@@ -1045,6 +1170,14 @@ export default function AdminScreen({
                     {!profile.is_admin && (
                       <div className="flex shrink-0 items-center gap-1">
                         <button
+                          onClick={() => void openBanModal(profile.nickname)}
+                          title="Block this account's IPs"
+                          aria-label={`Block IPs of ${profile.nickname}`}
+                          className="rounded-lg p-2 text-slate-500 dark:text-slate-400 transition hover:bg-red-500/10 hover:text-red-500 dark:hover:text-red-400"
+                        >
+                          <Ban className="h-4 w-4" />
+                        </button>
+                        <button
                           onClick={() => {
                             clearNotices();
                             setNewPassword('');
@@ -1079,6 +1212,82 @@ export default function AdminScreen({
           </section>
         )}
  
+        {tab === 'ipbans' && (
+          <section>
+            <div className={`${panelClass} mb-5 p-4`}>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10">
+                  <Ban className="h-5 w-5 text-red-600 dark:text-red-300" />
+                </div>
+                <div>
+                  <h2 className="font-semibold">IP bans</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Blocked networks cannot log in, and their sessions stop
+                    working.
+                  </p>
+                </div>
+                <button
+                  onClick={() => void loadIpBans()}
+                  disabled={loadingBans}
+                  className={`${buttonClass} ml-auto ${neutralButton}`}
+                  title="Refresh IP bans"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${
+                      loadingBans ? 'animate-spin' : ''
+                    }`}
+                  />
+                  <span className="hidden sm:inline">Refresh</span>
+                </button>
+              </div>
+            </div>
+
+            {loadingBans && ipBans.length === 0 ? (
+              <LoadingState label="Loading IP bans..." />
+            ) : ipBans.length === 0 ? (
+              <EmptyState
+                icon={<Ban className="h-10 w-10" />}
+                title="No blocked IPs"
+                detail="Open the Users tab and block an account to fill this list."
+              />
+            ) : (
+              <div className="space-y-2">
+                {ipBans.map((ban) => (
+                  <div
+                    key={ban.ip}
+                    className={`${panelClass} flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-sm font-semibold">
+                          {ban.ip}
+                        </span>
+                        {ban.nickname && (
+                          <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-bold text-red-700 dark:text-red-300">
+                            {ban.nickname}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 break-words text-xs text-slate-500">
+                        {ban.reason || 'No reason given'} · blocked by{' '}
+                        {ban.banned_by || 'admin'} ·{' '}
+                        {formatDate(ban.created_at)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => void handleUnban(ban.ip)}
+                      className={`${buttonClass} shrink-0 ${neutralButton}`}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Unblock
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {tab === 'rooms' && (
           <section>
             <div className={`${panelClass} mb-5 p-4`}>
@@ -1441,6 +1650,109 @@ export default function AdminScreen({
         </Modal>
       )}
  
+      {/* IP blocking */}
+      {banTarget && (
+        <Modal
+          onClose={() => {
+            if (banBusy) return;
+            closeBanModal();
+          }}
+        >
+          <div className="mb-5 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10">
+              <Ban className="h-5 w-5 text-red-600 dark:text-red-300" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold">Block this account's IPs</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {banTarget}
+              </p>
+            </div>
+          </div>
+
+          {banIpsLoading ? (
+            <p className="flex items-center gap-2 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading IP history...
+            </p>
+          ) : banIps.length === 0 ? (
+            <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+              No IP has been recorded for this account yet. It gets one on its
+              next login.
+            </p>
+          ) : (
+            <>
+              <ul className="max-h-40 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2 text-xs dark:border-slate-800">
+                {banIps.map((row) => (
+                  <li
+                    key={row.ip}
+                    className="flex items-center justify-between gap-2 px-1 py-1"
+                  >
+                    <span className="font-mono">{row.ip}</span>
+                    <span className="text-right text-slate-500">
+                      {row.banned
+                        ? 'already blocked'
+                        : row.other_accounts > 0
+                          ? `shared with ${row.other_accounts} other account${
+                              row.other_accounts === 1 ? '' : 's'
+                            }`
+                          : 'this account only'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              {banIps.some((row) => row.other_accounts > 0) && (
+                <p className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                  Some of these IPs are shared (school or office network).
+                  Everyone using them will be blocked as well.
+                </p>
+              )}
+            </>
+          )}
+
+          <label
+            htmlFor="ban-reason"
+            className="mb-2 mt-4 block text-sm font-medium text-slate-600 dark:text-slate-300"
+          >
+            Reason (optional)
+          </label>
+          <input
+            id="ban-reason"
+            value={banReason}
+            onChange={(event) => setBanReason(event.target.value)}
+            maxLength={200}
+            disabled={banBusy}
+            placeholder="e.g. harassment"
+            className="w-full rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-slate-900 outline-none focus:border-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
+
+          <div className="mt-5 flex gap-3">
+            <button
+              onClick={closeBanModal}
+              disabled={banBusy}
+              className={`${buttonClass} flex-1 ${neutralButton}`}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void handleBanAccount()}
+              disabled={
+                banBusy || banIpsLoading || banIps.length === 0
+              }
+              className={`${buttonClass} flex-1 bg-red-500 text-white hover:bg-red-400`}
+            >
+              {banBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Ban className="h-4 w-4" />
+              )}
+              Block IPs
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {/* Account password reset */}
       {resetTarget && (
         <Modal
