@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MessageCircle, Lock, User, ArrowRight, Loader2, Check, Search, Sun, Moon } from 'lucide-react';
 import { checkNickname, registerNickname, loginNickname } from '@/lib/auth';
+import { setLang } from '@/lib/i18n';
 import type { NicknameStatus } from '@/lib/auth';
 import { saveToken } from '@/lib/supabase';
 import { useTheme } from '@/lib/useTheme';
@@ -69,6 +70,10 @@ export default function AuthScreen({ onAuthSuccess }: Props) {
  
     if (result.ok) {
       saveToken(result.token);
+
+      // 새로 만든 계정은 영어로 시작 (같은 브라우저에 남은 이전 언어 설정 무시)
+      if (mode !== 'taken') setLang('en');
+
       onAuthSuccess(trimmedNick);
     } else {
       setError(result.error);

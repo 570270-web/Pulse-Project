@@ -27,8 +27,8 @@ type AppSidebarProps = {
 };
 
 const NAV_ITEMS = [
-  { id: 'hub' as const, label: '채팅', Icon: MessageCircle },
-  { id: 'ai' as const, label: 'AI', Icon: Sparkles },
+  { id: 'hub' as const, labelKey: 'nav.chat' as const, Icon: MessageCircle },
+  { id: 'ai' as const, labelKey: 'nav.ai' as const, Icon: Sparkles },
 ];
 
 const ITEM_CLASS =
@@ -58,6 +58,8 @@ export default function AppSidebar({
 }: AppSidebarProps) {
   const { theme, toggleTheme } = useTheme();
   const { lang, setLang } = useLang();
+
+  const menuLabel = tr('menu.account');
 
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -117,13 +119,13 @@ export default function AppSidebar({
       </div>
 
       <nav aria-label="주요 메뉴" className="flex flex-col items-center gap-1">
-        {NAV_ITEMS.map(({ id, label, Icon }) => (
+        {NAV_ITEMS.map(({ id, labelKey, Icon }) => (
           <button
             key={id}
             type="button"
             onClick={() => onNavigate(id)}
-            title={label}
-            aria-label={label}
+            title={tr(labelKey)}
+            aria-label={tr(labelKey)}
             aria-current={active === id ? 'page' : undefined}
             className={`${ITEM_CLASS} ${active === id ? ITEM_ON : ITEM_OFF}`}
           >
@@ -142,7 +144,7 @@ export default function AppSidebar({
           aria-haspopup="menu"
           aria-expanded={menuPosition !== null}
           title={nickname}
-          aria-label={`${nickname} 계정 메뉴`}
+          aria-label={`${nickname} · ${menuLabel}`}
           className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 text-sm font-bold text-white shadow-md shadow-cyan-500/20 transition ${
             menuPosition ? 'ring-2 ring-cyan-400/60' : ''
           }`}
@@ -156,7 +158,7 @@ export default function AppSidebar({
           <div
             ref={menuRef}
             role="menu"
-            aria-label="계정 메뉴"
+            aria-label={menuLabel}
             style={{ left: menuPosition.left, bottom: menuPosition.bottom }}
             className="fixed z-50 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
           >
@@ -175,7 +177,7 @@ export default function AppSidebar({
               ) : (
                 <Moon className="h-4 w-4 shrink-0 text-slate-400" />
               )}
-              {theme === 'dark' ? '라이트 모드' : '다크 모드'}
+              {theme === 'dark' ? tr('menu.light') : tr('menu.dark')}
             </button>
 
             <button
@@ -185,7 +187,7 @@ export default function AppSidebar({
               className={MENU_ITEM_CLASS}
             >
               <Languages className="h-4 w-4 shrink-0 text-slate-400" />
-              <span className="flex-1">언어</span>
+              <span className="flex-1">{tr('menu.language')}</span>
               <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
                 {lang === 'ko' ? '한국어' : 'English'}
               </span>
@@ -218,7 +220,7 @@ export default function AppSidebar({
               className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
             >
               <LogOut className="h-4 w-4 shrink-0" />
-              로그아웃
+              {tr('menu.logout')}
             </button>
           </div>,
           document.body
