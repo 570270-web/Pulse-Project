@@ -92,8 +92,8 @@ function parseError(message: string): string {
   if (normalized.includes('NICKNAME_NOT_FOUND')) {
     return 'Nickname not found.';
   }
-  if (normalized.includes('IP_BANNED')) {
-    return 'This network has been blocked by an administrator.';
+  if (normalized.includes('DEVICE_BANNED')) {
+    return 'This device has been blocked by an administrator.';
   }
   if (normalized.includes('CANNOT_BAN_ADMIN')) {
     return 'Administrator accounts cannot be blocked.';
@@ -288,31 +288,33 @@ export async function deleteProfile(nickname: string): Promise<boolean> {
   return !error;
 }
  
-export type AccountIp = {
-  ip: string;
+export type AccountDevice = {
+  device_id: string;
+  user_agent: string | null;
   first_seen_at: string;
   last_seen_at: string;
   banned: boolean;
-  /** 같은 IP를 쓰는 다른 계정 수 */
+  /** 같은 기기를 쓰는 다른 계정 수 */
   other_accounts: number;
 };
 
-export type IpBan = {
-  ip: string;
+export type DeviceBan = {
+  device_id: string;
   nickname: string | null;
+  user_agent: string | null;
   reason: string | null;
   banned_by: string | null;
   created_at: string;
 };
 
-/** 관리자: 한 계정이 접속한 IP 목록 (밴 여부 포함) */
-export async function listAccountIps(
+/** 관리자: 한 계정이 접속한 기기 목록 (밴 여부 포함) */
+export async function listAccountDevices(
   nickname: string
-): Promise<AccountIp[]> {
+): Promise<AccountDevice[]> {
   const token = getToken();
   if (!token) return [];
 
-  const { data, error } = await supabase.rpc('admin_list_account_ips', {
+  const { data, error } = await supabase.rpc('admin_list_account_devices', {
     p_token: token,
     p_nickname: nickname,
   });
@@ -320,7 +322,8 @@ export async function listAccountIps(
   if (error || !data) return [];
 
   return (data as Array<Record<string, unknown>>).map((row) => ({
-    ip: String(row.ip ?? ''),
+    device_id: String(row.device_id ?? ''),
+    user_agent: row.user_agent == null ? null : String(row.user_agent),
     first_seen_at: String(row.first_seen_at ?? ''),
     last_seen_at: String(row.last_seen_at ?? ''),
     banned: row.banned === true,
@@ -328,8 +331,8 @@ export async function listAccountIps(
   }));
 }
 
-/** 관리자: 계정이 쓴 모든 IP를 차단 (차단된 IP 개수 반환) */
-export async function banAccountIps(
+/** 관리자: 계정이 쓴 모든 기기를 차단 (차단된 기기 수 반환) */
+export async function banAccountDevices(
   nickname: string,
   reason: string
 ): Promise<{ ok: boolean; count?: number; error?: string }> {
@@ -338,7 +341,7 @@ export async function banAccountIps(
     return { ok: false, error: 'Session expired. Please log in again.' };
   }
 
-  const { data, error } = await supabase.rpc('admin_ban_account_ips', {
+  const { data, error } = await supabase.rpc('admin_ban_account_devices', {
     p_token: token,
     p_nickname: nickname,
     p_reason: reason.trim() ? reason.trim() : null,
@@ -351,34 +354,35 @@ export async function banAccountIps(
   return { ok: true, count: Number(data ?? 0) };
 }
 
-/** 관리자: 현재 IP 차단 목록 */
-export async function listIpBans(): Promise<IpBan[]> {
+/** 관리자: 현재 기기 차단 목록 */
+export async function listDeviceBans(): Promise<DeviceBan[]> {
   const token = getToken();
   if (!token) return [];
 
-  const { data, error } = await supabase.rpc('admin_list_ip_bans', {
+  const { data, error } = await supabase.rpc('admin_list_device_bans', {
     p_token: token,
   });
 
   if (error || !data) return [];
 
   return (data as Array<Record<string, unknown>>).map((row) => ({
-    ip: String(row.ip ?? ''),
+    device_id: String(row.device_id ?? ''),
     nickname: row.nickname == null ? null : String(row.nickname),
+    user_agent: row.user_agent == null ? null : String(row.user_agent),
     reason: row.reason == null ? null : String(row.reason),
     banned_by: row.banned_by == null ? null : String(row.banned_by),
     created_at: String(row.created_at ?? ''),
   }));
 }
 
-/** 관리자: IP 하나 차단 해제 */
-export async function unbanIp(ip: string): Promise<boolean> {
+/** 관리자: 기기 하나 차단 해제 */
+export async function unbanDevice(deviceId: string): Promise<boolean> {
   const token = getToken();
   if (!token) return false;
 
-  const { error } = await supabase.rpc('admin_unban_ip', {
+  const { error } = await supabase.rpc('admin_unban_device', {
     p_token: token,
-    p_ip: ip,
+    p_device_id: deviceId,
   });
 
   return !error;

@@ -32,13 +32,13 @@ import {
   deleteProfile,
   logout,
   adminResetAccountPassword,
-  listAccountIps,
-  banAccountIps,
-  listIpBans,
-  unbanIp,
-  type AccountIp,
+  listAccountDevices,
+  banAccountDevices,
+  listDeviceBans,
+  unbanDevice,
+  type AccountDevice,
   type AdminProfile,
-  type IpBan,
+  type DeviceBan,
   type RoomSummary,
 } from '@/lib/auth';
 import { adminListSupportThreads, type SupportThreadRow } from '@/lib/rooms';
@@ -258,12 +258,12 @@ export default function AdminScreen({
   const [confirmAction, setConfirmAction] =
     useState<ConfirmAction>(null);
 
-  // IP 차단: 계정별 IP 목록 + 전체 차단 목록
-  const [ipBans, setIpBans] = useState<IpBan[]>([]);
+  // 기기 차단: 계정별 기기 목록 + 전체 차단 목록
+  const [deviceBans, setDeviceBans] = useState<DeviceBan[]>([]);
   const [loadingBans, setLoadingBans] = useState(true);
   const [banTarget, setBanTarget] = useState<string | null>(null);
-  const [banIps, setBanIps] = useState<AccountIp[]>([]);
-  const [banIpsLoading, setBanIpsLoading] = useState(false);
+  const [banDevices, setBanDevices] = useState<AccountDevice[]>([]);
+  const [banDevicesLoading, setBanDevicesLoading] = useState(false);
   const [banReason, setBanReason] = useState('');
   const [banBusy, setBanBusy] = useState(false);
  
@@ -387,11 +387,11 @@ export default function AdminScreen({
         setLoadingSupport(false);
   }, []);
 
-  const loadIpBans = useCallback(async () => {
+  const loadDeviceBans = useCallback(async () => {
     setLoadingBans(true);
 
     try {
-      setIpBans(await listIpBans());
+      setDeviceBans(await listDeviceBans());
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -406,8 +406,8 @@ export default function AdminScreen({
     void loadRooms();
     void loadRequests();
     void loadSupport();
-    void loadIpBans();
-  }, [loadProfiles, loadRooms, loadRequests, loadSupport, loadIpBans]);
+    void loadDeviceBans();
+  }, [loadProfiles, loadRooms, loadRequests, loadSupport, loadDeviceBans]);
  
   // 방에서 돌아오면 화면은 그대로 보여주고, 뒤에서 조용히 새로고침한다
   const wasActive = useRef(true);
@@ -419,7 +419,7 @@ export default function AdminScreen({
       void loadRooms();
       void loadRequests();
             void loadSupport();
-      void loadIpBans();
+      void loadDeviceBans();
     }
 
     wasActive.current = active;
@@ -429,7 +429,7 @@ export default function AdminScreen({
     loadRooms,
     loadRequests,
     loadSupport,
-    loadIpBans,
+    loadDeviceBans,
   ]);
  
   // 문의 배지는 가끔 새로 읽는다
@@ -550,22 +550,22 @@ export default function AdminScreen({
     clearNotices();
     setBanTarget(target);
     setBanReason('');
-    setBanIps([]);
-    setBanIpsLoading(true);
+    setBanDevices([]);
+    setBanDevicesLoading(true);
 
     try {
-      setBanIps(await listAccountIps(target));
+      setBanDevices(await listAccountDevices(target));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
-      setBanIpsLoading(false);
+      setBanDevicesLoading(false);
     }
   };
 
   const closeBanModal = () => {
     setBanTarget(null);
     setBanReason('');
-    setBanIps([]);
+    setBanDevices([]);
   };
 
   const handleBanAccount = async () => {
@@ -575,7 +575,7 @@ export default function AdminScreen({
     clearNotices();
 
     try {
-      const result = await banAccountIps(banTarget, banReason);
+      const result = await banAccountDevices(banTarget, banReason);
 
       if (!result.ok) {
         setError(result.error ?? 'Failed to block this account.');
@@ -584,18 +584,18 @@ export default function AdminScreen({
 
       if (!result.count) {
         setError(
-          `No IP was recorded for "${banTarget}". They get one on their next login.`
+          `No device was recorded for "${banTarget}" yet. One is added on the next login.`
         );
         return;
       }
 
       closeBanModal();
       setSuccess(
-        `Blocked ${result.count} IP${
+        `Blocked ${result.count} device${
           result.count === 1 ? '' : 's'
         } used by "${banTarget}".`
       );
-      await loadIpBans();
+      await loadDeviceBans();
       await loadProfiles();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -604,18 +604,18 @@ export default function AdminScreen({
     }
   };
 
-  const handleUnban = async (ip: string) => {
+  const handleUnban = async (deviceId: string) => {
     clearNotices();
 
-    const ok = await unbanIp(ip);
+    const ok = await unbanDevice(deviceId);
 
     if (!ok) {
-      setError('Could not unblock this IP.');
+      setError('Could not unblock this device.');
       return;
     }
 
-    setSuccess(`Unblocked ${ip}.`);
-    await loadIpBans();
+    setSuccess(`Unblocked device ${deviceId.slice(0, 12)}…`);
+    await loadDeviceBans();
   };
 
   const handleAccountPasswordReset = async () => {
@@ -1037,15 +1037,15 @@ export default function AdminScreen({
             onClick={() => {
               setTab('ipbans');
               clearNotices();
-              void loadIpBans();
+              void loadDeviceBans();
             }}
             className={tabClass('ipbans')}
           >
             <Ban className="h-4 w-4" />
-            IP bans
-            {ipBans.length > 0 && (
+            Device bans
+            {deviceBans.length > 0 && (
               <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-xs text-red-700 dark:text-red-300">
-                {ipBans.length}
+                {deviceBans.length}
               </span>
             )}
           </button>
@@ -1171,8 +1171,8 @@ export default function AdminScreen({
                       <div className="flex shrink-0 items-center gap-1">
                         <button
                           onClick={() => void openBanModal(profile.nickname)}
-                          title="Block this account's IPs"
-                          aria-label={`Block IPs of ${profile.nickname}`}
+                          title="Block this account's devices"
+                          aria-label={`Block devices of ${profile.nickname}`}
                           className="rounded-lg p-2 text-slate-500 dark:text-slate-400 transition hover:bg-red-500/10 hover:text-red-500 dark:hover:text-red-400"
                         >
                           <Ban className="h-4 w-4" />
@@ -1220,17 +1220,17 @@ export default function AdminScreen({
                   <Ban className="h-5 w-5 text-red-600 dark:text-red-300" />
                 </div>
                 <div>
-                  <h2 className="font-semibold">IP bans</h2>
+                  <h2 className="font-semibold">Device bans</h2>
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Blocked networks cannot log in, and their sessions stop
-                    working.
+                    Blocked devices cannot log in, even with a new account.
+                    Their live sessions stop working too.
                   </p>
                 </div>
                 <button
-                  onClick={() => void loadIpBans()}
+                  onClick={() => void loadDeviceBans()}
                   disabled={loadingBans}
                   className={`${buttonClass} ml-auto ${neutralButton}`}
-                  title="Refresh IP bans"
+                  title="Refresh device bans"
                 >
                   <RefreshCw
                     className={`h-4 w-4 ${
@@ -1242,25 +1242,25 @@ export default function AdminScreen({
               </div>
             </div>
 
-            {loadingBans && ipBans.length === 0 ? (
-              <LoadingState label="Loading IP bans..." />
-            ) : ipBans.length === 0 ? (
+            {loadingBans && deviceBans.length === 0 ? (
+              <LoadingState label="Loading device bans..." />
+            ) : deviceBans.length === 0 ? (
               <EmptyState
                 icon={<Ban className="h-10 w-10" />}
-                title="No blocked IPs"
+                title="No blocked devices"
                 detail="Open the Users tab and block an account to fill this list."
               />
             ) : (
               <div className="space-y-2">
-                {ipBans.map((ban) => (
+                {deviceBans.map((ban) => (
                   <div
-                    key={ban.ip}
+                    key={ban.device_id}
                     className={`${panelClass} flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between`}
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-mono text-sm font-semibold">
-                          {ban.ip}
+                          {ban.device_id.slice(0, 12)}…
                         </span>
                         {ban.nickname && (
                           <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-bold text-red-700 dark:text-red-300">
@@ -1269,13 +1269,16 @@ export default function AdminScreen({
                         )}
                       </div>
                       <p className="mt-1 break-words text-xs text-slate-500">
+                        {ban.user_agent || 'unknown device'}
+                      </p>
+                      <p className="mt-1 break-words text-xs text-slate-500">
                         {ban.reason || 'No reason given'} · blocked by{' '}
                         {ban.banned_by || 'admin'} ·{' '}
                         {formatDate(ban.created_at)}
                       </p>
                     </div>
                     <button
-                      onClick={() => void handleUnban(ban.ip)}
+                      onClick={() => void handleUnban(ban.device_id)}
                       className={`${buttonClass} shrink-0 ${neutralButton}`}
                     >
                       <RefreshCw className="h-4 w-4" />
@@ -1650,7 +1653,7 @@ export default function AdminScreen({
         </Modal>
       )}
  
-      {/* IP blocking */}
+      {/* Device blocking */}
       {banTarget && (
         <Modal
           onClose={() => {
@@ -1663,33 +1666,38 @@ export default function AdminScreen({
               <Ban className="h-5 w-5 text-red-600 dark:text-red-300" />
             </div>
             <div>
-              <h2 className="text-lg font-bold">Block this account's IPs</h2>
+              <h2 className="text-lg font-bold">
+                Block this account's devices
+              </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 {banTarget}
               </p>
             </div>
           </div>
 
-          {banIpsLoading ? (
+          {banDevicesLoading ? (
             <p className="flex items-center gap-2 text-sm text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading IP history...
+              Loading device history...
             </p>
-          ) : banIps.length === 0 ? (
+          ) : banDevices.length === 0 ? (
             <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
-              No IP has been recorded for this account yet. It gets one on its
-              next login.
+              No device has been recorded for this account yet. One is added
+              on the next login.
             </p>
           ) : (
             <>
               <ul className="max-h-40 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2 text-xs dark:border-slate-800">
-                {banIps.map((row) => (
+                {banDevices.map((row) => (
                   <li
-                    key={row.ip}
-                    className="flex items-center justify-between gap-2 px-1 py-1"
+                    key={row.device_id}
+                    className="flex flex-col gap-0.5 px-1 py-1"
                   >
-                    <span className="font-mono">{row.ip}</span>
-                    <span className="text-right text-slate-500">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono">
+                        {row.device_id.slice(0, 12)}…
+                      </span>
+                      <span className="text-right text-slate-500">
                       {row.banned
                         ? 'already blocked'
                         : row.other_accounts > 0
@@ -1697,15 +1705,19 @@ export default function AdminScreen({
                               row.other_accounts === 1 ? '' : 's'
                             }`
                           : 'this account only'}
+                      </span>
+                    </div>
+                    <span className="truncate text-slate-400">
+                      {row.user_agent || 'unknown device'}
                     </span>
                   </li>
                 ))}
               </ul>
 
-              {banIps.some((row) => row.other_accounts > 0) && (
+              {banDevices.some((row) => row.other_accounts > 0) && (
                 <p className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-                  Some of these IPs are shared (school or office network).
-                  Everyone using them will be blocked as well.
+                  Some of these devices are shared (school PC, tablet).
+                  Accounts using them will be blocked as well.
                 </p>
               )}
             </>
@@ -1738,7 +1750,7 @@ export default function AdminScreen({
             <button
               onClick={() => void handleBanAccount()}
               disabled={
-                banBusy || banIpsLoading || banIps.length === 0
+                banBusy || banDevicesLoading || banDevices.length === 0
               }
               className={`${buttonClass} flex-1 bg-red-500 text-white hover:bg-red-400`}
             >
@@ -1747,7 +1759,7 @@ export default function AdminScreen({
               ) : (
                 <Ban className="h-4 w-4" />
               )}
-              Block IPs
+              Block devices
             </button>
           </div>
         </Modal>

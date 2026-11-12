@@ -7,11 +7,44 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Missing Supabase environment variables');
 }
 
+const DEVICE_KEY = 'pulse_device_id';
+
+/**
+ * 이 브라우저(기기)를 구분하는 값. 관리자의 "기기 밴" 기준이 된다.
+ * 계정과 무관하게 브라우저에 남기 때문에, 같은 기기에서 새 계정을 만들어도 그대로 적용된다.
+ */
+export function getDeviceId(): string {
+  try {
+    const stored = localStorage.getItem(DEVICE_KEY);
+
+    if (stored && /^[0-9a-f]{32}$/.test(stored)) return stored;
+
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    const next = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(
+      ''
+    );
+
+    localStorage.setItem(DEVICE_KEY, next);
+
+    return next;
+  } catch {
+    // 저장소를 쓸 수 없으면 기기 식별 불가
+    return '';
+  }
+}
+
+const deviceId = getDeviceId();
+
 export const supabase: SupabaseClient = createClient(
   supabaseUrl ?? 'https://placeholder.supabase.co',
   supabaseAnonKey ?? 'placeholder-anon-key',
   {
     auth: { persistSession: false },
+    // 모든 RPC 호출에 기기 ID를 같이 보낸다 (서버가 기기 밴을 판정)
+    global: {
+      headers: deviceId ? { 'x-pulse-device': deviceId } : {},
+    },
   }
 );
 
