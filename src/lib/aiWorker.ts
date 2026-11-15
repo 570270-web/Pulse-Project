@@ -20,6 +20,22 @@ import type {
 
 env.allowLocalModels = false;
 
+// onnxruntime wasm 은 빌드 산출물에서 빠져 있다(호스팅 업로드 한도).
+// 설치된 버전과 정확히 맞는 CDN 파일을 쓰도록 미리 지정한다.
+const ort = env.backends.onnx as unknown as {
+  versions?: { web?: string };
+  wasm?: { wasmPaths?: unknown };
+};
+
+if (ort.versions?.web && ort.wasm) {
+  const ortCdn = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ort.versions.web}/dist/`;
+
+  ort.wasm.wasmPaths = {
+    mjs: `${ortCdn}ort-wasm-simd-threaded.asyncify.mjs`,
+    wasm: `${ortCdn}ort-wasm-simd-threaded.asyncify.wasm`,
+  };
+}
+
 const post = (event: AiWorkerEvent) =>
   (self as unknown as { postMessage: (event: AiWorkerEvent) => void }).postMessage(
     event,
